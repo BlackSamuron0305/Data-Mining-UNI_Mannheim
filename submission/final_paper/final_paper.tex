@@ -1,0 +1,92 @@
+% IE500 Data Mining - final paper (project report).
+% LaTeX template of the DWS thesis (thesis.tex), as the course requires.
+% Do not change document class, margins, fonts, etc.
+\documentclass[a4paper,oneside,bibliography=totoc]{scrbook}
+
+% some useful packages (add more as needed)
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{latexsym}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{algorithm} % you can modify the algorithm style to your liking
+\counterwithin{algorithm}{chapter} % so that algorithms have chapter numbers as well
+\usepackage{algorithmic}
+\usepackage{csquotes}
+\renewcommand{\algorithmiccomment}[1]{\hfill\textit{// #1}}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage[colorlinks,citecolor=Green]{hyperref} % you may change/remove the colors
+
+% chicago citation style
+\usepackage{natbib}
+\bibliographystyle{chicagoa}
+\setcitestyle{authoryear,round,semicolon,aysep={},yysep={,}} \let\cite\citep
+
+% team number, names and title (shared with the proposal and the presentation)
+\input{../team}
+
+\begin{document}
+
+% Course limits: at most 12 pages including the title/contents page and the reference page,
+% at most 10 pages of content, no appendix. Title, contents and AI declaration share the first page.
+\frontmatter
+\KOMAoptions{titlepage=false}
+\subject{IE500 Data Mining -- Project Report}
+\title{\ProjectTitle}
+\subtitle{\ProjectSubtitle}
+\author{Team \TeamNumber\\[.3em] \TeamMembers}
+\date{\SubmissionDate}
+\publishers{{\small Submitted to}\\
+  Data and Web Science Group\\
+  University of Mannheim\\}
+\maketitle
+
+% table of contents
+\begingroup%
+\hypersetup{hidelinks}% disable link color in TOC only
+\setuptoc{toc}{leveldown}% heading as a section, so that it stays on the title page
+\setcounter{tocdepth}{0}%
+\tableofcontents%
+\endgroup
+
+% Declare below which AI tools you used in the process of writing your work,
+% including text, image, code, and data generation (required by the course).
+\begin{center}
+  \textbf{Declaration of Used AI Tools} \\[.3em]
+  \footnotesize
+  \begin{tabularx}{\textwidth}{@{}lXlc@{}}
+    \toprule
+    Tool & Purpose & Where? & Useful? \\
+    \midrule
+     &  &  &  \\
+    \bottomrule
+  \end{tabularx}
+\end{center}
+
+% okay, start new numbering ... here is where it really starts
+\mainmatter
+
+\chapter{Application Area and Goals}
+\label{ch:goals}
+
+\chapter{Data Set Profile}
+\label{ch:data}
+
+\chapter{Preprocessing}
+\label{ch:preprocessing}
+
+\chapter{Data Mining}
+\label{ch:mining}
+
+\chapter{Evaluation}
+\label{ch:evaluation}
+
+\chapter{Results}
+\label{ch:results}
+
+% uncomment once the first \cite is in the text (BibTeX stops with an error without citations)
+% \bibliography{references}
+
+\end{document}

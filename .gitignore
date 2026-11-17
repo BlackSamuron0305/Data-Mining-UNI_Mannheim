@@ -1,0 +1,36 @@
+# uv: none of it is ever pushed
+.venv/
+pyproject.toml
+uv.lock
+.python-version
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# keys of the Lichess storage (copy .env.example to .env)
+.env
+
+# built by the scripts in src/ (see data/README.md)
+data/*
+!data/README.md
+cache/
+
+# LaTeX build files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.vrb

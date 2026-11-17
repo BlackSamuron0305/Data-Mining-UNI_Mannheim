@@ -1,0 +1,29 @@
+# Settings of the data selection. Every script reads them from here (src/config.py).
+seed: 42
+workers: 16                  # processes that parse the games; the environment variable IE500_WORKERS overrides it
+
+source:
+  # The raw monthly files of database.lichess.org (rated standard games), unchanged, on the team's read-only S3
+  # storage (copies of 2026-08 and 2026-09, checked against Lichess's sha256 sums). Endpoint, bucket and keys
+  # come from .env (a copy of .env.example).
+  month: "2026-09"
+  key: lichess_db_standard_rated_{month}.pgn.zst
+
+filters:                     # complete cases (src/lichess/pgn.py)
+  speeds: [bullet, blitz, rapid, classical]      # ultrabullet and correspondence are dropped
+  terminations: [Normal, Time forfeit]           # abandoned games and rule infractions are dropped
+  min_plies: 20                                  # at least 10 moves by each player
+
+selection:
+  # Group of a game: speed x Elo of the mean of both ratings. Bucket of a move: speed x Elo of the mover x the
+  # mover's time left before the move. See src/preprocessing/selection/.
+  n_games: 350000            # training + test games
+  test_frac: 0.20            # share of test games inside every group
+  elo_bin: 250               # Elo bins: below 750, 750-1000, ..., 1750-2000, 2000 and above
+  elo_min: 500
+  elo_max: 2000
+  window: 30                 # time left in 30 s steps ...
+  window_max: {bullet: 120, blitz: 300, rapid: 900, classical: 1800}   # ... up to the usual longest start (last step open)
+  min_games: 100             # buckets with fewer games are kept but marked as uncertain
+  candidate_rate: 0.10       # complete games with a random number below this are kept by the census: n_games needs
+                             # about 4% of them, the rest are the replacement games of the balancing
