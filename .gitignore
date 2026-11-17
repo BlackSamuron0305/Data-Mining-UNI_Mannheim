@@ -1,8 +1,5 @@
-# uv: none of it is ever pushed
+# uv: the environment is built locally by `uv sync`
 .venv/
-pyproject.toml
-uv.lock
-.python-version
 
 # Python
 __pycache__/

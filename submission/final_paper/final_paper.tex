@@ -18,11 +18,21 @@
 \renewcommand{\algorithmiccomment}[1]{\hfill\textit{// #1}}
 \usepackage[usenames,dvipsnames]{xcolor}
 \usepackage[colorlinks,citecolor=Green]{hyperref} % you may change/remove the colors
+\usepackage[bottom]{footmisc} % footnotes below a figure at the bottom of the page
+\usepackage{listings} % excerpt of the game file, set as code (as in the proposal)
+\lstset{basicstyle=\ttfamily\footnotesize, columns=fullflexible, keepspaces=true,
+  backgroundcolor=\color{black!6}, frame=single, rulecolor=\color{black!30}, framesep=3pt,
+  xleftmargin=4pt, xrightmargin=4pt, aboveskip=0pt, belowskip=0pt,
+  moredelim={[is][\color{BrickRed}]{@}{@}}} % @...@ marks the blunder
 
 % chicago citation style
 \usepackage{natbib}
 \bibliographystyle{chicagoa}
 \setcitestyle{authoryear,round,semicolon,aysep={},yysep={,}} \let\cite\citep
+
+% A number that is not known yet: it comes from the census or the selection (data/stratified_selection/,
+% cache/census/). Search for \tbd before submitting; none may be left.
+\newcommand{\tbd}{\textcolor{red}{\textbf{??}}}
 
 % team number, names and title (shared with the proposal and the presentation)
 \input{../team}
@@ -60,7 +70,10 @@
     \toprule
     Tool & Purpose & Where? & Useful? \\
     \midrule
-     &  &  &  \\
+    % "Useful?" is the team's own judgement; fill it in.
+    Claude Code (Anthropic) & Review of the data selection code; code of the training methods decision
+      tree, random forest, naive Bayes and neural network; first drafts of Chapters 1--4
+      & \texttt{src/}, Ch.~1--4 & \\
     \bottomrule
   \end{tabularx}
 \end{center}
@@ -68,25 +81,480 @@
 % okay, start new numbering ... here is where it really starts
 \mainmatter
 
+% ======================================================================================================
+% Course outline: application area and goals (0.5 pages)
 \chapter{Application Area and Goals}
 \label{ch:goals}
 
+\section{Online Chess and Blunders}
+
+Online chess is played at a scale no other board game reaches. Lichess, a free and open-source chess
+server, published 89,616,462 rated games for September 2026 alone, about three million a day
+\cite{lichessdb}. Most of them are bullet and blitz games, in which each player has between one and a
+few minutes for the whole game. Decisions are made under time pressure, and many games are not won by
+the better plan but lost by a single bad move.
+
+Lichess calls such a move a \emph{blunder}: a move that lowers the mover's winning chances by at least
+30 percentage points \cite{lichessadvice}. The winning chances are a logistic function of the Stockfish
+evaluation in centipawns \cite{lichessaccuracy}, and every game that a player has analysed marks its
+blunders with ``??''. Figure~\ref{fig:blunder} shows a typical one. With 40 seconds left against more
+than six minutes, White puts the queen on an undefended square; White's winning chances fall from 47\,\%
+to 3\,\%, and Black takes the queen on the next move.
+
+% blunder_example.pdf is the board figure of the proposal (submission/proposal/)
+\begin{figure}[tb]
+  \begin{minipage}[c]{0.255\textwidth}
+    \includegraphics[width=\linewidth]{../proposal/blunder_example}
+  \end{minipage}\hfill
+  \begin{minipage}[c]{0.715\textwidth}
+\begin{lstlisting}
+[WhiteElo "1413"] [BlackElo "1452"] [TimeControl "600+0"]
+28. cxd5 { [%eval -0.36] [%clk 0:00:40] }
+28... cxd5 { [%eval -0.32] [%clk 0:06:22] }
+29. @Qc3??@ { [%eval -9.42] [%clk 0:00:18] }
+29... Qxc3 { [%eval -9.41] [%clk 0:06:18] } 0-1
+\end{lstlisting}
+    \caption{End of a game in the data
+      (\href{https://lichess.org/Eh02O2q8}{\texttt{lichess.org/Eh02O2q8}}): with 40 seconds left against
+      6:22, White puts the queen on c3, undefended (``??'', red), and Black takes it.}
+    \label{fig:blunder}
+  \end{minipage}
+\end{figure}
+
+\section{The Gap: Engines Judge Positions, Not Players}
+
+A chess engine tells how good a position is under perfect play. It does not tell how likely a human of
+a given strength, with a given amount of time, is to go wrong in it. A position can be equal for the
+engine and still be a trap for a player with seconds on the clock, and the evaluation bar shown next
+to every broadcast game says nothing about this risk. Earlier work modelled human rather than optimal
+play: the Maia models, trained on Lichess games, predict which move a player of a given rating will
+make \cite{mcilroyyoung2020maia}. We look at one decisive kind of human move, the blunder, and at the
+situation in which it is made:
+
+\begin{quote}
+\emph{Can a model predict whether a human player will blunder on their upcoming move, using clock
+pressure, position evaluation, player rating and game progression?}
+\end{quote}
+
+\section{Applications}
+
+A blunder model is useful wherever human chess play is watched or trained:
+\begin{itemize}
+  \item \textbf{Training.} Lichess marks blunders only after a game. A model of the risk shows a
+    player the situations in which they tend to blunder, for example little time in a sharp position,
+    and so where to practise or to spend their time differently.
+  \item \textbf{Broadcasts and spectators.} Next to the engine's evaluation, a live estimate of the
+    blunder risk would show how hard a position is to play for the humans at the board.
+  \item \textbf{Decisions under time pressure.} Chess records millions of decisions, each with the
+    time it took and an objective measure of its quality. Which conditions make errors likely is a
+    question beyond chess as well.
+\end{itemize}
+
+\section{Task and Goals}
+
+This is a binary classification task. One example is one position of a game, seen before the move;
+its label is 1 if the move that follows is marked ``??'', else 0. Only about one move in twenty is a
+blunder (Section~\ref{sec:quality}), so the classes are strongly imbalanced. Our goals are:
+\begin{enumerate}
+  \item \textbf{Prediction:} a model that beats the strongest simple baseline, such as the blunder
+    rate per speed and rating, in Average Precision on held-out test games;
+  \item \textbf{Explanation:} which kinds of information carry the signal (clock, evaluation,
+    ratings, game progress, board complexity, earlier errors), and readable rules from a decision
+    tree;
+  \item \textbf{Robustness:} how the performance differs between speeds, rating bands and phases of
+    the game.
+\end{enumerate}
+We predict whether a blunder happens, not which move will be played, and we do not build a live
+system.
+
+% ======================================================================================================
+% Course outline: profile (structure and size) of the data set, at least 1 page.
+% Checklist: distribution of the target, all attributes and their types, data quality.
 \chapter{Data Set Profile}
 \label{ch:data}
 
+We use the Lichess Open Database \cite{lichessdb} (licence CC0), which holds one file per month with every
+rated standard game on Lichess. Ours is September 2026: 89,616,462 games, 29.2~GB of zstd-compressed PGN
+text. Every game is a block of 17 header lines (plus the titles, if a player has one) and one line of
+moves, each move followed by the mover's clock and, in analysed games, the Stockfish evaluation and the
+marks \texttt{?!}, \texttt{?} or \texttt{??} (Figure~\ref{fig:blunder}). The target is not a column of
+its own but the ``??'' mark on a move. Table~\ref{tab:attributes} lists every attribute with its type
+and our use of it.
+
+\begin{table}[tb]
+  \centering\small
+  \caption{Every attribute of a game in the Lichess file and its use: \checkmark{} feature, F only to filter or
+    draw the games, T target, $\times$ removed (reasons in Section~\ref{sec:attributes}). Counts of values from
+    the first 42,759 games of the month.}
+  \label{tab:attributes}
+  % header fields and counts: first three zstd frames of lichess_db_standard_rated_2026-09.pgn.zst
+  \begin{tabularx}{\textwidth}{@{}llXc@{}}
+    \toprule
+    Attribute & Type & Values & Use \\
+    \midrule
+    \multicolumn{4}{@{}l}{\emph{Per game: 17 header lines, plus the titles if a player has one}} \\
+    \texttt{Event} & categorical & \texttt{Rated Blitz game}, \texttt{Rated Blitz tournament <link>},
+      \texttt{Blitz swiss <link>}, \dots & \checkmark \\
+    \texttt{Site} & identifier & link to the game, e.g.\ \texttt{lichess.org/mQMQpBqI} & F \\
+    \texttt{Date}, \texttt{UTCDate} & date & day the game started, e.g.\ \texttt{2026.09.01} & $\times$ \\
+    \texttt{UTCTime} & time & time the game started (UTC), e.g.\ \texttt{00:33:03} & \checkmark \\
+    \texttt{Round} & constant & always \texttt{-} & $\times$ \\
+    \texttt{White}, \texttt{Black} & identifier & user names, about 24,600 distinct ones each & $\times$ \\
+    \texttt{White/BlackElo} & integer & rating before the game, e.g.\ \texttt{1500} & \checkmark \\
+    \texttt{White/BlackTitle} & categorical & \texttt{BOT}, \texttt{FM}, \texttt{CM}, \dots;
+      in 1\,\% of the games & F \\
+    \texttt{TimeControl} & categorical & start time + increment in seconds, e.g.\ \texttt{180+0},
+      \texttt{120+1} & \checkmark \\
+    \texttt{ECO} & categorical & opening code, 395 values, e.g.\ \texttt{B01} & \checkmark \\
+    \texttt{Opening} & categorical & opening name, 1,672 values & $\times$ \\
+    \texttt{Termination} & categorical & \texttt{Normal}, \texttt{Time forfeit}, \texttt{Abandoned}, \dots & F \\
+    \texttt{Result} & categorical & \texttt{1-0}, \texttt{0-1}, \texttt{1/2-1/2} & $\times$ \\
+    \texttt{White/BlackRatingDiff} & integer & rating change through the game,
+      e.g.\ \texttt{+6} & $\times$ \\
+    \midrule
+    \multicolumn{4}{@{}l}{\emph{Per move (features only from the moves before the one we predict)}} \\
+    move & categorical & standard algebraic notation, e.g.\ \texttt{Qc3} & \checkmark \\
+    \texttt{[\%clk]} & duration & the mover's time left after the move & \checkmark \\
+    \texttt{[\%eval]} & numeric & Stockfish evaluation after the move, or \texttt{\#n} for mate in $n$ & \checkmark \\
+    \texttt{?!}, \texttt{?} & categorical & inaccuracy, mistake & \checkmark \\
+    \texttt{??} & binary & blunder (on earlier moves also a feature) & T \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Attributes We Keep and Remove}
+\label{sec:attributes}
+
+\textbf{Features (\checkmark).} The ratings give the mover's, the opponent's and their difference
+(Lichess ratings are Glicko-2; we call them Elo, as the file does). \texttt{TimeControl} gives start time
+and increment; the clocks in the file already include the increment. \texttt{Event} gives the speed
+(Section~\ref{sec:speeds}) and the kind of game: lobby, arena or swiss tournament. In an arena a player
+may \emph{berserk} and halve their start time, so clock features use the clocks in the file.
+\texttt{UTCTime} gives the hour of the day, a weak proxy for fatigue. Of \texttt{ECO} we keep the letter
+(five opening families), which is settled after the first moves; the 395 full codes would be too
+sparse. Of the moves before the one we predict, we use the board, clocks, evaluations and marks.
+
+\textbf{Filter only (F).} \texttt{Site} holds the game id for the random draw. Titles remove computer
+players (\texttt{BOT}). \texttt{Termination} keeps games that ended normally or on time.
+
+\textbf{Removed ($\times$).} \texttt{Result} and the rating changes, which follow from it, are known only
+after the game, and so is everything of the move we predict: the move, the time spent on it and the
+evaluation after it, from which Lichess derives the label. \texttt{Date}, \texttt{UTCDate} and
+\texttt{Round} carry no information within one month. User names would let a model memorise players
+rather than situations. \texttt{Opening} is a finer version of \texttt{ECO}.
+
+\section{Quality and Target}
+\label{sec:quality}
+
+Clocks are recorded in almost every game, but only games that a player had analysed carry evaluations
+and ``??'' marks: about \tbd\% of the month. Without them a game has no label, so it is dropped, not
+imputed (Section~\ref{sec:filters}). Of the \tbd{} moves of the complete games, \tbd\% are blunders; a
+model that never predicts one is right on \tbd\% of the moves. The rate differs by speed and rating
+(Table~\ref{tab:groups}) and by the time left on the clock.
+% TODO: blunder rate by speed, rating and time left (cache/census/buckets.csv), one small figure.
+
+% ======================================================================================================
+% Course checklist: missing values, outliers, validity, inconsistencies, duplicates, normalisation,
+% feature generation, binning, feature subset selection.
 \chapter{Preprocessing}
 \label{ch:preprocessing}
 
+\section{Complete Cases}
+\label{sec:filters}
+
+We read every game of the month once and keep the \emph{complete cases} only: rated games of speed
+bullet to classical, from the lobby as well as from arena and swiss tournaments, both ratings known and no computer player, ended normally or on time, at least
+20 plies (10 moves per player), all moves legal, a clock time on every move and a Stockfish evaluation
+after every move (except a mating move, which has none). Abandoned games and rule violations say
+little about decisions under pressure; games under 20 plies are mostly early resignations.
+Table~\ref{tab:funnel} shows how many games pass each step.
+
+\begin{table}[tb]
+  \centering\small
+  \caption{Games of September 2026 after each filter step, by speed (Section~\ref{sec:speeds}).}
+  \label{tab:funnel}
+  % numbers: cache/census/funnel.csv
+  \begin{tabular}{@{}lrrrrr@{}}
+    \toprule
+    Step & bullet & blitz & rapid & classical & all \\
+    \midrule
+    all games of the file & \tbd & \tbd & \tbd & \tbd & 89,616,462 \\
+    speed bullet to classical & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    with engine evaluations & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    ratings, players, termination, $\geq$ 20 plies & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    clock and evaluation on every move (complete) & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Game Types}
+\label{sec:speeds}
+
+We keep the four speeds that Lichess assigns to every game. Lichess does not use the start time alone
+but the \emph{estimated duration} of a game of 40 moves per player \cite{scalachessspeed}:
+\[
+  \text{estimated duration} = \text{start time} + 40 \cdot \text{increment} \quad\text{(seconds)}.
+\]
+Games with an increment are therefore not a type of their own: each falls into the speed of its
+estimated duration (Table~\ref{tab:speeds}). This keeps games of similar length together, while a
+separate increment type would put 2+1 and 15+10 games into one group. We drop ultrabullet games
+(under 30 seconds) and correspondence games (days per move).
+
+\begin{table}[tb]
+  \centering\small
+  \caption{Lichess speeds by estimated duration, with common time controls (start time in minutes +
+    increment in seconds) \cite{scalachessspeed}.}
+  \label{tab:speeds}
+  \begin{tabularx}{\textwidth}{@{}llXl@{}}
+    \toprule
+    Speed & Estimated duration & Time control: estimated duration & Used \\
+    \midrule
+    ultrabullet & under 30\,s & 1/4+0: 15\,s & no \\
+    bullet & 30--179\,s & 1+0: 60\,s; \ 2+1: 120 + 40 = 160\,s & yes \\
+    blitz & 180--479\,s & 3+0: 180\,s; \ 3+2: 180 + 80 = 260\,s; \ 5+3: 300 + 120 = 420\,s & yes \\
+    rapid & 480--1499\,s & 10+0: 600\,s; \ 10+5: 600 + 200 = 800\,s; \ 15+10: 900 + 400 = 1300\,s & yes \\
+    classical & 1500\,s and more & 30+0: 1800\,s; \ 30+20: 1800 + 800 = 2600\,s & yes \\
+    correspondence & days per move & -- & no \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The increment itself enters the model as a feature. It also matters for the time a player spends on a
+move: since the increment is added after every move, the time spent is the clock before the move minus
+the clock after it, plus the increment.
+
+\section{Strata}
+\label{sec:strata}
+
+Our sampling unit is the whole game, because a position's features depend on the moves before it.
+A game must therefore fall into exactly one stratum. We use 28 \emph{groups}: the four speeds times
+seven rating bands of the mean rating of both players, in steps of 250 points from below 750 to 2000
+and above (Table~\ref{tab:groups}). The mean is needed because a game has two players; it puts a game
+of 1000 against 1800 into the same band as one of 1400 against 1400, which is rare, as Lichess pairs
+players of similar rating.
+% TODO: share of games with a rating difference above 400 points, from games.csv.
+
+The time left on the clock cannot define a stratum of games, as it changes with every move. We use it
+for the moves instead: a move falls into one of 756 \emph{buckets} of speed, the rating band of the
+mover and the mover's time left before the move, in steps of 30 seconds up to the usual start time of
+the speed (2, 5, 15 and 30 minutes; the last step is open). The buckets serve to check that the
+selection has the same blunder rate as the month under every combination of these three
+(Section~\ref{sec:selection}).
+
+\begin{table}[tb]
+  \centering\small
+  \caption{The 28 groups (speed $\times$ band of the mean rating of both players): complete games of
+    September 2026 in thousands.}
+  \label{tab:groups}
+  % numbers: cache/census/groups.csv (column games); shares and selected games in
+  % data/stratified_selection/tables/groups.csv
+  \begin{tabular}{@{}lrrrrrrr@{}}
+    \toprule
+     & \multicolumn{7}{c}{Mean rating of both players} \\
+    \cmidrule(l){2-8}
+    Speed & $<$750 & 750--999 & 1000--1249 & 1250--1499 & 1500--1749 & 1750--1999 & $\geq$2000 \\
+    \midrule
+    bullet    & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    blitz     & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    rapid     & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    classical & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Selection and Split}
+\label{sec:selection}
+
+The complete games are far more than we can turn into features, so we draw 350,000 of them. Every group
+gets exactly its share of the month's complete games (proportional allocation, rounded by largest
+remainders), and inside a group the games are drawn at random. The random number of a game is a hash
+of a fixed seed and its game id, so the selection can be repeated exactly. The file, an unchanged copy
+checked against the SHA-256 sum that Lichess publishes, is read once, in parallel, as a sequence of
+independently compressed blocks of about 14,000 games each, without unpacking it to disk.
+
+We then split the games, not the positions, into 80\,\% training and 20\,\% test games inside every
+group, so both parts keep the shares of the groups and no game contributes positions to both parts.
+The selection contains \tbd{} training and \tbd{} test games with \tbd{} and \tbd{} positions; their
+blunder rate is \tbd\% and \tbd\%, against \tbd\% in the month.
+% TODO (open decision): the code also swaps single games for others of the same group until the
+% blunder rate of every bucket equals the month's. This selects games by their label; decide whether
+% to keep it (then describe it here) or drop it (then remove it from stratified_selection.py).
+
+% TODO: replay of the games with python-chess \cite{pythonchess}, labelling, features (six groups),
+% missing values, scaling, encoding, class imbalance (see the proposal, Section 3).
+
+% ======================================================================================================
+% Course outline: different approaches and parameter settings/optimisations that we tried.
+% Checklist: baselines, at least one symbolic and one non-symbolic approach, hyperparameter tuning.
 \chapter{Data Mining}
 \label{ch:mining}
 
+\section{What Every Method Shares}
+\label{sec:setup}
+
+Every method sees the same examples: one move, described by what is known before it is played, with
+the label ``??'' or not. A fixed 10\,\% of the training games, chosen by a hash of the game id, is held
+out of the fitting; these \emph{held-out games} decide early stopping and every hyperparameter, and
+the test games are used only once, for the final comparison (Chapter~\ref{ch:evaluation}). Holding
+out whole games, not single moves, matters because moves of one game share the players, the time
+control and the position, so a held-out move of a fitted game would look easier than a new game.
+
+Every method outputs a probability, and none is trained with class weights or resampling. The
+applications in Chapter~\ref{ch:goals} show a risk, not a yes or no, and our main scores, log loss
+and Average Precision, judge probabilities and their order. Reweighting the blunders would raise
+every prediction above the true rate, and Average Precision depends only on the order of the moves,
+which reweighting does not improve by itself. Where a decision is needed, a threshold on the
+probability can be chosen afterwards.
+
+Every method is run on three feature sets of growing information: \emph{basic} (speed, rating of
+the mover and time left, the variables of the buckets, as numbers), \emph{context} (all features of
+the game, clocks, evaluation, earlier errors and the board) and \emph{engine} (context plus
+Stockfish's view of the candidate moves, for the analysed subset of the games). Running one learner
+on all three separates what the information adds from what the learner adds, which is goal~2.
+All methods except the baseline use scikit-learn \cite{pedregosa2011sklearn}.
+
+\section{Methods and Why We Chose Them}
+\label{sec:methods}
+
+We chose seven methods so that each answers a question the others cannot: a baseline that a model
+must beat, a lower and an upper reference among the learners, a readable symbolic model, and two
+non-symbolic ones that differ in how they combine features (Table~\ref{tab:methods}).
+
+\begin{table}[tb]
+  \centering\small
+  \caption{The seven methods. Missing values: how a method deals with features that do not exist yet,
+    such as the time spent on the previous move at the first move. Interactions: whether a method can
+    learn that two features matter together, such as little time \emph{and} a sharp position.}
+  \label{tab:methods}
+  \begin{tabularx}{\textwidth}{@{}llllX@{}}
+    \toprule
+    Method & Kind & Missing values & Interactions & Tuned on the held-out games \\
+    \midrule
+    Bucket rate & baseline & -- & by the buckets & -- \\
+    Naive Bayes & probabilistic & median + indicator & no & feature transform \\
+    Logistic regression & linear & median + indicator & no & L2 penalty $C$ \\
+    Decision tree & symbolic & routed by the tree & yes & depth \\
+    Random forest & bagged trees & routed by the trees & yes & leaf size, features per split \\
+    Gradient boosting & boosted trees & routed by the trees & yes & learning rate, leaves, rounds \\
+    Neural network & non-symbolic & median + indicator & yes & layers, L2 penalty, epochs \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\paragraph{Bucket rate (baseline).} Every move gets the blunder rate of its bucket: speed, rating
+band of the mover and time left in steps of 30 seconds (Section~\ref{sec:strata}). It is the strongest
+rule that needs no learning, and it is the baseline that goal~1 names, refined by the clock. A model
+that does not beat it has learned nothing beyond speed, rating and time pressure. We take the rates
+from every complete game of the month, of which the test games are only about 0.4\,\%, and, as a
+check, from the training games alone, pulled towards the rate of their speed and rating band by 50
+moves, so that a sparsely filled bucket does not get an extreme rate.
+
+\paragraph{Naive Bayes.} The simplest probabilistic learner: one normal distribution per feature
+and class, the features independent given the class. It needs no search and fits millions of moves
+in seconds, so it is the lower reference among the learners. Clock times and counts are strongly
+skewed, so every feature is first mapped to a normal distribution by its quantiles. The independence
+assumption is clearly broken here: the time left, its share of the start time and the difference to
+the opponent's clock say much the same, and naive Bayes counts that evidence several times. We
+therefore expect a fair order of the moves but overconfident probabilities, as is known for this
+method \cite{niculescu2005calibration}, and use it to show how much the calibration of a model
+matters for log loss.
+
+\paragraph{Logistic regression.} A linear model of the log-odds of a blunder, fitted by log loss and
+so calibrated by construction. On standardised features each coefficient is the change in the
+log-odds per standard deviation, a second, global explanation next to the rules of the tree. It
+cannot combine features unless we build the combination ourselves, which makes it the test for
+interactions: if the trees beat it clearly, then situations such as little time in a sharp position
+carry more risk than their parts. Missing features are filled with the median and flagged by an
+indicator, so that ``no earlier move yet'' stays visible to the model; an L2 penalty keeps the
+coefficients of correlated features stable.
+
+\paragraph{Decision tree.} The symbolic method. A tree splits on thresholds, which suits our
+features: time pressure sets in below a few seconds rather than growing evenly with the clock, and a
+split can capture this and its interaction with the rating without us defining either
+\cite{breiman1984cart}. Its rules answer goal~2 directly. A single tree varies strongly with the data,
+so we choose its depth between 2 and 12 by the log loss of the held-out games, require at least 1,000
+moves per leaf and pull the blunder rate of every leaf towards the overall rate by 50 moves, as for the
+buckets; without this, a leaf without a blunder would predict 0 and cost an infinite log loss on its
+first blunder. The tuned tree is usually too deep to read, so for the paper we report the rules of a
+tree of depth 4.
+
+\paragraph{Random forest.} Many deep trees, each grown on a bootstrap sample of the moves with a
+random subset of the features at every split, averaged \cite{breiman2001forests}. Averaging lowers
+the variance of the single tree while keeping its thresholds and interactions, with few
+hyperparameters and little risk of overfitting. It is the counterpart of gradient boosting: the forest
+fights variance with independent trees, boosting fights bias with trees that correct each other.
+Comparing the two shows which of the two errors limits us. Each tree uses 20\,\% of the fitting moves
+to keep memory and run time down, and every leaf keeps at least 200 moves so that its rate is a
+probability rather than 0 or 1. Forests tend to pull probabilities towards the middle
+\cite{niculescu2005calibration}, which the calibration in Chapter~\ref{ch:evaluation} checks.
+
+\paragraph{Gradient boosting.} Shallow trees fitted one after the other, each to the errors of the
+ones before \cite{friedman2001boosting}. On tabular data of our kind it is usually the most accurate
+method, so we expect it to be our best model and use it to measure how much the engine features
+add. We use the histogram-based variant \cite{ke2017lightgbm}, which bins every feature once and makes
+millions of moves feasible on one machine; it handles missing values and the speed as a category
+itself. The number of rounds is set by early stopping, when the log loss of the held-out games has not
+improved for 30 rounds.
+
+\paragraph{Neural network.} The non-symbolic counterpart of the trees: a multi-layer perceptron with
+two hidden layers of 64 and 32 units forms smooth functions of all features at once, instead of
+splitting on one feature at a time. It can learn interactions without thresholds, and so shows whether
+the step-like rules of the trees miss gradual effects. It needs features on one scale, so it uses the
+preprocessing of the logistic regression; its output is a probability fitted by log loss, trained with
+Adam \cite{kingma2015adam} and an L2 penalty. After every pass over the fitting moves we measure the
+log loss of the held-out games and keep the network of the best pass. We do this ourselves because
+scikit-learn's built-in early stopping holds out random moves, which would put moves of one game on
+both sides.
+
+\section{Methods We Did Not Use}
+
+\textbf{$k$ nearest neighbours} keeps every training move and compares each new move with all of
+them, which is too slow for millions of moves, and its probability is a share of $k$ neighbours, too
+coarse for a rate of a few percent unless $k$ is very large. \textbf{Support vector machines} with a
+kernel need time that grows faster than the square of the number of examples and give no
+probabilities without an extra calibration step; a linear one is close to the logistic regression,
+which gives probabilities directly. \textbf{Resampling} such as undersampling or SMOTE would change the
+rate of blunders the models learn, so every probability would have to be corrected afterwards, and a
+synthetic move between two positions of different games describes no real situation.
+
+\section{Hyperparameters}
+\label{sec:tuning}
+
+Table~\ref{tab:tuning} lists the values we tried. Every combination is a run of its own, scored on the
+held-out games; the best run per method and feature set goes on to the test games. The rounds of
+gradient boosting and the epochs of the network are not tried but set by early stopping.
+% TODO: keep the values tried in line with the runs in data/runs/ and fill in the chosen ones.
+
+\begin{table}[tb]
+  \centering\small
+  \caption{Hyperparameters tried on the held-out games and the values chosen (feature set context).}
+  \label{tab:tuning}
+  \begin{tabularx}{\textwidth}{@{}llXl@{}}
+    \toprule
+    Method & Hyperparameter & Values tried & Chosen \\
+    \midrule
+    Naive Bayes & feature transform & quantile to normal, standardised & \tbd \\
+    Logistic regression & L2 penalty $C$ & 0.01, 0.1, 1, 10 & \tbd \\
+    Decision tree & depth & 2, 3, 4, 5, 6, 8, 10, 12 (min.\ 1,000 moves per leaf) & \tbd \\
+    Random forest & moves per leaf; features per split & 100, 200, 500; $\sqrt{p}$, $p/2$ & \tbd \\
+    Gradient boosting & learning rate; leaves per tree & 0.05, 0.1; 31, 63, 127 & \tbd \\
+    Neural network & hidden layers; L2 penalty & (32), (64, 32), (128, 64); $10^{-5}$, $10^{-4}$, $10^{-3}$ & \tbd \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% ======================================================================================================
+% Course outline: evaluation setup (split, cross-validation), analysis of the errors of the best
+% method, discussion, comparison to the state of the art (together at least 2 pages).
+% Checklist: stratified? cost matrix? tuned ranges? symbolic model analysed? feature impact?
 \chapter{Evaluation}
 \label{ch:evaluation}
 
+% ======================================================================================================
+% Checklist: result critically evaluated, compared with the baselines, what it means for the problem.
 \chapter{Results}
 \label{ch:results}
 
-% uncomment once the first \cite is in the text (BibTeX stops with an error without citations)
-% \bibliography{references}
+\bibliography{references}
 
 \end{document}

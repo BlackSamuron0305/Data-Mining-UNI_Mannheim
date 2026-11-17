@@ -8,11 +8,13 @@ Usage:  uv run python -m src.preprocessing.selection.stratified_selection     (a
    random: the ones with the smallest random number u of the census.
 2. Training and test games: inside every group, test_frac of the drawn games become test games (those with
    the smallest split number, a second fixed random number of the game id), so both parts keep the shares.
-3. Balancing, each part on its own: single games are swapped for other random candidate games of the same
+3. Balancing (only with selection.balance: true in config.yaml; off by default, because it picks games by their
+   label), each part on its own: single games are swapped for other random candidate games of the same
    group until the blunder probability of every bucket of moves (speed x Elo of the mover x time left) equals
    the month's, while the share of moves per bucket stays the month's as well. The training part takes its
    replacement games only from candidates with a split number of at least test_frac, the test part only from
-   those below it, so no game can end up in both parts.
+   those below it, so no game can end up in both parts. Without balancing, the plain draw is compared with the
+   month by src/preprocessing/bucket_rates/selection_check.py.
 4. The PGN text of the selected games is copied unchanged from the candidates of the census.
 
 Outputs (data/stratified_selection/; probabilities.py adds the chance of every game to be selected)
@@ -42,6 +44,7 @@ from src.preprocessing.selection.census import N_B, uniform
 log = logging.getLogger("stratified_selection")
 SEL = CFG["selection"]
 N, TEST_FRAC, MIN_GAMES = SEL["n_games"], SEL["test_frac"], SEL["min_games"]
+BALANCE = bool(SEL.get("balance", False))
 LAMBDA = 0.1                     # weight of the move mix against the blunder probabilities in the balancing
 PARTS = ("train", "test")
 GAMES_DIR, TABLES_DIR, LOGS_DIR = (STRATIFIED_DIR / d for d in (GAMES_SUB, TABLES_SUB, LOGS_SUB))
@@ -56,9 +59,9 @@ def allocate(n: int, shares: np.ndarray) -> np.ndarray:
     return out
 
 
-def draw(cand: pd.DataFrame, group_games: np.ndarray) -> np.ndarray:
+def draw(cand: pd.DataFrame, group_games: np.ndarray, n: int = N) -> np.ndarray:
     """Row indices (into `cand`) of n games: exactly the share of every group, random inside it."""
-    need, out = allocate(N, group_games), []
+    need, out = allocate(n, group_games), []
     u, h = cand["u"].to_numpy(), cand["group"].to_numpy()
     for group in np.flatnonzero(need):
         rows = np.flatnonzero(h == group)
@@ -263,7 +266,10 @@ def run() -> None:
     start = {"train": (sel[~test], free[v[free] >= TEST_FRAC], 100), "test": (sel[test], free[v[free] < TEST_FRAC], 101)}
     chosen, stats, parts = {}, {}, {}
     for p, (first, pool, seed) in start.items():
-        chosen[p], stats[p] = balance(first, pool, groups, ent, bt["rate"].to_numpy(), bt["share"].to_numpy(), seed)
+        if BALANCE:
+            chosen[p], stats[p] = balance(first, pool, groups, ent, bt["rate"].to_numpy(), bt["share"].to_numpy(), seed)
+        else:
+            chosen[p], stats[p] = first, {"balanced": False, "games_replaced": 0}
         parts[p] = ent.totals(chosen[p])
         log.info("%s part: %s games, %s replaced, %.1f min", p, f"{len(first):,}", f"{stats[p]['games_replaced']:,}",
                  (time.time() - t0) / 60)

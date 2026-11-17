@@ -19,13 +19,18 @@ from collections import Counter
 from collections.abc import Iterator
 from typing import NamedTuple
 
+from compression import zstd
+
+import chess.engine
 import chess.pgn
 import numpy as np
 
 from src.config import CFG
 
 GAME_START_RE = re.compile(r"^\[Event ", re.M)    # "[Event" at the start of a line opens a game
-SPEED_RE = re.compile(r"Rated (\w+)")             # Event "Rated Blitz game" -> blitz
+# Event of a lobby game, an arena and a swiss tournament: "Rated Blitz game", "Rated Blitz tournament <link>",
+# "Blitz swiss <link>" (swiss games lack "Rated", but the file holds rated games only) -> blitz
+SPEED_RE = re.compile(r"(?:Rated )?(\w+) (?:game|tournament|swiss)\b")
 STEPS = ["scanned", "speed bullet-classical", "has engine evaluations", "passes filters", "complete case"]
 FILTERS = CFG["filters"]
 
@@ -47,6 +52,42 @@ def split_games(text: str) -> Iterator[str]:
     starts = [m.start() for m in GAME_START_RE.finditer(text)] + [len(text)]
     for a, b in zip(starts, starts[1:]):
         yield text[a:b]
+
+
+def iter_pgn(path) -> Iterator[str]:
+    """The original text of every game in a .pgn.zst file, one game at a time (the file is streamed)."""
+    buf: list[str] = []
+    with zstd.open(path, "rt", encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("[Event ") and buf:
+                yield "".join(buf)
+                buf = []
+            buf.append(line)
+    if buf:
+        yield "".join(buf)
+
+
+def time_control(tc: str) -> tuple[int, int]:
+    """Start time and increment in seconds of a TimeControl header such as '180+2'."""
+    base, _, inc = tc.partition("+")
+    return int(base), int(inc or 0)
+
+
+# Lichess turns an evaluation into winning chances with a logistic curve of the centipawns, capped at +-1000; a
+# mate counts as the cap. A move is a blunder when it lowers the mover's winning chances (-1 to 1) by 0.3 or more,
+# a mistake by 0.2, an inaccuracy by 0.1: in win probability (0 to 1) that is 0.15, 0.10 and 0.05.
+CP_CAP = 1000
+WIN_K = 0.00368208
+
+
+def capped_cp(score: chess.engine.Score) -> int:
+    """Centipawns of an evaluation, mates and large values capped at +-CP_CAP."""
+    return max(-CP_CAP, min(CP_CAP, score.score(mate_score=100_000)))
+
+
+def win_prob(cp) -> np.ndarray:
+    """Win probability (0 to 1) of the side the centipawns are counted for, as Lichess computes it."""
+    return 1.0 / (1.0 + np.exp(-WIN_K * np.clip(np.asarray(cp, dtype=float), -CP_CAP, CP_CAP)))
 
 
 def read_game(pgn: str) -> chess.pgn.Game | None:

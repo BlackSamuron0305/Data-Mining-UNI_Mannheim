@@ -27,3 +27,29 @@ selection:
   min_games: 100             # buckets with fewer games are kept but marked as uncertain
   candidate_rate: 0.10       # complete games with a random number below this are kept by the census: n_games needs
                              # about 4% of them, the rest are the replacement games of the balancing
+  balance: false             # swap games until every bucket's blunder probability equals the month's. This picks
+                             # games by their label, so it is off: the plain stratified draw is checked against the
+                             # month instead (src/preprocessing/bucket_rates/selection_check.py)
+  check_draws: 20            # random stratified draws that show how far a selection may stray from the month by chance
+
+features:
+  # One row per move of the selected games, with what is known before the move is played
+  # (src/preprocessing/features/positions.py).
+  recent_moves: 5            # the mover's last moves for the recent averages (loss, time spent)
+  marks: {inaccuracy: 0.05, mistake: 0.10, blunder: 0.15}   # loss in win probability (0-1) of Lichess's marks,
+                             # used to classify the engine's candidate moves
+
+engine:
+  # Stockfish on the position before every move (src/preprocessing/features/engine.py). The program is the
+  # environment variable STOCKFISH_PATH, else `path` (a name on PATH or a file).
+  path: stockfish
+  limit: {depth: 10}         # per position, python-chess chess.engine.Limit, e.g. {nodes: 100000}
+  multipv: all               # all legal moves ranked (best 5, worst 5, share of losing moves), or a number such as 5
+  threads: 1                 # per engine; one engine per worker process
+  hash_mb: 16
+  games: {train: 5000, test: 2000}   # random games per part to analyse; null = every game of the part
+  batch: 50                  # games per output file, so that a stopped run continues where it was
+
+training:
+  valid_frac: 0.10           # training games held out, by game, for early stopping and choosing between runs
+  max_train_games: null      # random subset of the training games for a quick run; null = all

@@ -109,6 +109,20 @@ def uniform(game_id: str, salt: str = "ie500-strata") -> float:
     return int.from_bytes(h, "little") / 2.0 ** 64
 
 
+def move_buckets(speed: str, white_elo: int, black_elo: int, clk: np.ndarray) -> np.ndarray:
+    """Bucket of every ply of a game: speed x Elo of the mover x the mover's time left before the move. `clk` is
+    the mover's clock after every ply in whole seconds; the first move of each side counts the clock after it."""
+    n, s = len(clk), SPEEDS.index(speed)
+    elo = elo_bin(np.where(np.arange(n) % 2 == 0, white_elo, black_elo))
+    own = np.concatenate((clk[:2], clk[:-2]))          # the mover's clock before the move
+    return B_OFF[s] + elo * N_W[s] + np.minimum(own // WIN, N_W[s] - 1)
+
+
+def game_group(speed: str, white_elo: int, black_elo: int) -> int:
+    """Group of a game: speed x Elo of the mean of both ratings."""
+    return SPEEDS.index(speed) * N_E + int(elo_bin((white_elo + black_elo) / 2))
+
+
 def census_text(text: str) -> dict:
     """Counts of the complete games in `text` (which must hold whole games) and the candidates among them."""
     funnel, tcs = Counter(), Counter()
@@ -118,17 +132,14 @@ def census_text(text: str) -> dict:
         g = complete_game(chunk, funnel)
         if g is None:
             continue
-        n, s = len(g.clk), SPEEDS.index(g.speed)
+        n = len(g.clk)
         tcs[(g.speed, g.time_control)] += 1
-        white = np.arange(n) % 2 == 0
-        elo = elo_bin(np.where(white, g.white_elo, g.black_elo))
-        own = np.concatenate((g.clk[:2], g.clk[:-2]))          # the mover's clock before the move
-        b = B_OFF[s] + elo * N_W[s] + np.minimum(own // WIN, N_W[s] - 1)
+        b = move_buckets(g.speed, g.white_elo, g.black_elo, g.clk)
         ub, inv = np.unique(b, return_inverse=True)
         b_moves.append(b)
         b_blunders.append(b[g.blunder])
         b_games.append(ub)
-        h = s * N_E + int(elo_bin((g.white_elo + g.black_elo) / 2))
+        h = game_group(g.speed, g.white_elo, g.black_elo)
         groups.append(h)
         g_moves.append(n)
         g_blunders.append(int(g.blunder.sum()))

@@ -20,6 +20,10 @@ DATA = Path(os.environ.get("IE500_DATA") or ROOT / "data")
 CACHE = Path(os.environ.get("IE500_CACHE") or ROOT / "cache")
 CENSUS_DIR = CACHE / "census"
 STRATIFIED_DIR = DATA / "stratified_selection"
+BUCKET_RATES_DIR = DATA / "bucket_rates"          # blunder probability per bucket of the month; check of the selection
+FEATURES_DIR = DATA / "features"                  # one row per move: positions/ and engine/
+RUNS_DIR = DATA / "runs"                          # one folder per training run: runs/<method>/<name>/
+VALIDATION_DIR = DATA / "validation"              # every run scored on the same moves
 # subfolders of a selection in data/: the games (PGN and one row per game), the tables of counts and chances,
 # the records of the runs (settings, statistics, logs); summary.md stays at the top (data/README.md)
 GAMES_SUB, TABLES_SUB, LOGS_SUB = "games", "tables", "logs"
@@ -27,9 +31,8 @@ GAMES_SUB, TABLES_SUB, LOGS_SUB = "games", "tables", "logs"
 S3_NAMES = ("LICHESS_S3_ENDPOINT", "LICHESS_S3_BUCKET", "LICHESS_S3_ACCESS_KEY", "LICHESS_S3_SECRET_KEY")
 
 
-def s3_settings() -> dict[str, str]:
-    """Endpoint, bucket and keys of the storage with the raw Lichess files: the environment variables
-    LICHESS_S3_*, else the file .env at the root of the repository."""
+def dotenv() -> dict[str, str]:
+    """The settings in the file .env at the root of the repository (empty if there is none)."""
     out = {}
     env_file = ROOT / ".env"
     if env_file.exists():
@@ -37,6 +40,18 @@ def s3_settings() -> dict[str, str]:
             key, sep, value = line.partition("=")
             if sep and not key.strip().startswith("#"):
                 out[key.strip()] = value.strip()
+    return out
+
+
+def env(name: str) -> str | None:
+    """An environment variable, else its value in .env, else None."""
+    return os.environ.get(name) or dotenv().get(name) or None
+
+
+def s3_settings() -> dict[str, str]:
+    """Endpoint, bucket and keys of the storage with the raw Lichess files: the environment variables
+    LICHESS_S3_*, else the file .env at the root of the repository."""
+    out = dotenv()
     out.update({k: os.environ[k] for k in S3_NAMES if os.environ.get(k)})
     missing = [k for k in S3_NAMES if not out.get(k)]
     if missing:
