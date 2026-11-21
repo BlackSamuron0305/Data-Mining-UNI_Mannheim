@@ -67,15 +67,22 @@ def manifest(s3, bucket: str) -> dict:
         raise
 
 
-def local_path(name: str) -> Path:
-    """Where a file of the server belongs on this computer."""
+def local_path(name: str) -> Path | None:
+    """Where a file of the server belongs on this computer, or None if the name is not one we expect."""
     package, _, rest = name.partition("/")
+    if not rest or Path(rest).name != rest or Path(rest).is_absolute():
+        return None
     if package == "cleanup":
-        return CLEANUP_DIR / rest
-    part = rest.removesuffix(".parquet")
-    if part in PARTS:
-        return STOCKFISH_DIR / part / "stockfish.parquet"
-    return STOCKFISH_DIR / rest
+        base, dst = CLEANUP_DIR, CLEANUP_DIR / rest
+    elif package == "stockfish" and rest.removesuffix(".parquet") in PARTS:
+        base, dst = STOCKFISH_DIR, STOCKFISH_DIR / rest.removesuffix(".parquet") / "stockfish.parquet"
+    elif package == "stockfish" and rest == "engine.json":
+        base, dst = STOCKFISH_DIR, STOCKFISH_DIR / rest
+    else:
+        return None
+    if not dst.resolve().is_relative_to(base.resolve()):
+        return None
+    return dst
 
 
 def merged_stockfish(part: str, tmp: Path) -> Path:
@@ -130,8 +137,8 @@ def download(packages: list[str]) -> None:
         sys.exit(f"nothing of {', '.join(packages)} under {bucket}/{folder()}/ yet")
     for name in names:
         dst = local_path(name)
-        if ".." in Path(name).parts or not dst.resolve().is_relative_to(ROOT.resolve()):
-            sys.exit(f"unsafe path in manifest.json: {name}")
+        if dst is None:
+            sys.exit(f"unexpected file name in manifest.json: {name}")
         info = man["files"][name]
         if dst.exists() and dst.stat().st_size == info["bytes"] and sha256(dst) == info["sha256"]:
             print(f"  {name}: already there")
