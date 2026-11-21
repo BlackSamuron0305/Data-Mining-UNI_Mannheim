@@ -9,9 +9,17 @@ dependencies = [
     "chess>=1.11.2",
     "matplotlib>=3.11.2",
     "numpy>=2.5.5",
+    "optuna>=5.1.0",
     "pandas>=3.1.0,!=3.1.1",
     "pyarrow>=26.0.0,!=26.0.1",
     "pyyaml>=6.0.3",
     "scikit-learn>=1.9.1",
+    "scipy>=1.18.1",
     "urllib3>=2.8.0",
+    "xgboost>=3.4.1",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.4.0",
 ]

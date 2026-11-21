@@ -1,4 +1,4 @@
-"""Settings and paths shared by every script. The settings live in config.yaml at the root of the repository."""
+"""Settings (from config.yaml) and paths shared by every script."""
 from __future__ import annotations
 
 import logging
@@ -14,19 +14,25 @@ SEED: int = CFG["seed"]
 WORKERS: int = int(os.environ.get("IE500_WORKERS") or min(CFG["workers"], os.cpu_count() or 1))
 MONTH: str = CFG["source"]["month"]
 
-# data/ holds the selected games, cache/ the working files of the scripts; neither is tracked by git
-# (data/README.md). The environment variables IE500_DATA and IE500_CACHE point them elsewhere, e.g. for a test run.
+# IE500_DATA and IE500_CACHE point data/ and cache/ elsewhere; IE500_SELECTION picks the selection that
+# the later steps use
 DATA = Path(os.environ.get("IE500_DATA") or ROOT / "data")
 CACHE = Path(os.environ.get("IE500_CACHE") or ROOT / "cache")
-CENSUS_DIR = CACHE / "census"
-STRATIFIED_DIR = DATA / "stratified_selection"
-BUCKET_RATES_DIR = DATA / "bucket_rates"          # blunder probability per bucket of the month; check of the selection
-FEATURES_DIR = DATA / "features"                  # one row per move: positions/ and engine/
-RUNS_DIR = DATA / "runs"                          # one folder per training run: runs/<method>/<name>/
-VALIDATION_DIR = DATA / "validation"              # every run scored on the same moves
-# subfolders of a selection in data/: the games (PGN and one row per game), the tables of counts and chances,
-# the records of the runs (settings, statistics, logs); summary.md stays at the top (data/README.md)
-GAMES_SUB, TABLES_SUB, LOGS_SUB = "games", "tables", "logs"
+CLEANUP_DIR = CACHE / "cleanup"
+BLUNDER_RATES_DIR = DATA / "blunder_rates"
+SELECTIONS = ["random", "stratified", "balanced"]
+SELECTION = os.environ.get("IE500_SELECTION") or "stratified"
+SELECTION_ROOT = DATA / "selection"
+SELECTION_DIR = SELECTION_ROOT / SELECTION
+COMPARISON_DIR = SELECTION_ROOT / "comparison"
+FEATURES_DIR = DATA / "features"
+RUNS_DIR = DATA / "runs"
+VALIDATION_DIR = DATA / "validation"
+GAMES_SUB = "games"
+TABLES_SUB = "tables"
+LOGS_SUB = "logs"
+KEYS = ["game_id", "ply"]   # one row per move
+TARGET = "blunder"
 
 S3_NAMES = ("LICHESS_S3_ENDPOINT", "LICHESS_S3_BUCKET", "LICHESS_S3_ACCESS_KEY", "LICHESS_S3_SECRET_KEY")
 
@@ -49,14 +55,18 @@ def env(name: str) -> str | None:
 
 
 def s3_settings() -> dict[str, str]:
-    """Endpoint, bucket and keys of the storage with the raw Lichess files: the environment variables
-    LICHESS_S3_*, else the file .env at the root of the repository."""
+    """Endpoint, bucket and keys of the S3 storage, from the environment or else from .env."""
     out = dotenv()
-    out.update({k: os.environ[k] for k in S3_NAMES if os.environ.get(k)})
+    for k in S3_NAMES:
+        if os.environ.get(k):
+            out[k] = os.environ[k]
     missing = [k for k in S3_NAMES if not out.get(k)]
     if missing:
         raise RuntimeError(f"{', '.join(missing)} not set: copy .env.example to .env and fill in the keys")
-    return {k: out[k] for k in S3_NAMES}
+    settings = {}
+    for k in S3_NAMES:
+        settings[k] = out[k]
+    return settings
 
 
 def setup_log(path: Path) -> None:

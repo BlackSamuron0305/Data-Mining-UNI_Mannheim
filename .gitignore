@@ -13,9 +13,14 @@ dist/
 # keys of the Lichess storage (copy .env.example to .env)
 .env
 
+# job scripts for bwUniCluster (personal workspace paths)
+cluster/
+
 # built by the scripts in src/ (see data/README.md)
 data/*
 !data/README.md
+# other data folders (IE500_DATA), e.g. data_balanced/ of the balancing experiment
+data_*/
 cache/
 
 # LaTeX build files
@@ -31,3 +36,6 @@ cache/
 *.synctex.gz
 *.toc
 *.vrb
+
+# university slide template
+submission/presentation/PPT_Vorlagen_WIM_16x9.zip
