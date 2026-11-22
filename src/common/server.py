@@ -1,14 +1,4 @@
-"""Our prepared data on the team's server (S3), so that nobody needs the 30 GB month or 15 hours of Stockfish.
-
-Usage:  uv run python -m src.lichess.share download [cleanup] [stockfish]   (default: both)
-        uv run python -m src.lichess.share upload   [cleanup] [stockfish]   (needs a key that may write)
-        uv run python -m src.lichess.share list
-
-On the server, under Data-Mining-Project/<month folder>/:
-  raw/        the month as Lichess publishes it
-  cleanup/    the counts of the month and the pool of games (src/01_selection/preparation/cleanup/)
-  stockfish/  train.parquet, test.parquet, engine.json: Stockfish for every move of the selected games
-"""
+# Our prepared data on the team's server: list, download and upload (cleanup, Stockfish results, final tables)
 import argparse
 import hashlib
 import json
@@ -24,16 +14,18 @@ from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from src.config import CACHE, DATA, MONTH, ROOT, s3_settings
+from src.config import CACHE, DATA, FINAL_DIRS, MONTH, ROOT, SELECTION, SELECTIONS, SOURCE, s3_settings
 
 PROJECT = "Data-Mining-Project"
 MONTH_FOLDERS = {"2026-09": "September 2026", "2026-08": "August 2026"}
-PACKAGES = ["cleanup", "stockfish"]
+PACKAGES = ["cleanup", "stockfish", "preprocessed"]
 PARTS = ["train", "test"]
+FINAL_FILES = ["train.parquet", "test.parquet", "removed.csv"]
 KEYS = ["game_id", "ply"]
 CLEANUP_DIR = CACHE / "cleanup"
 STOCKFISH_DIR = DATA / "preprocessing" / "with_stockfish" / "stockfish"
-OLD_ENGINE_DIRS = [ROOT / "data" / "features" / "engine", ROOT / "data_balanced" / "features" / "engine"]
+# run A and run B share most games, so the server keeps one Stockfish file per part
+ENGINE_DIRS = [ROOT / d / "preprocessing" / "with_stockfish" / "stockfish" for d in ("data", "data_balanced")]
 TRANSFER = TransferConfig(multipart_threshold=64 << 20, multipart_chunksize=64 << 20, max_concurrency=16)
 
 
@@ -67,9 +59,14 @@ def manifest(s3, bucket: str) -> dict:
         raise
 
 
+# Where a file from the server goes on this computer (None if we do not expect it)
 def local_path(name: str) -> Path | None:
-    """Where a file of the server belongs on this computer, or None if the name is not one we expect."""
     package, _, rest = name.partition("/")
+    if package == "preprocessed":
+        parts = rest.split("/")
+        if len(parts) == 3 and parts[0] in SELECTIONS and parts[1] in FINAL_DIRS and parts[2] in FINAL_FILES:
+            return FINAL_DIRS[parts[1]] / parts[2]
+        return None
     if not rest or Path(rest).name != rest or Path(rest).is_absolute():
         return None
     if package == "cleanup":
@@ -85,10 +82,10 @@ def local_path(name: str) -> Path | None:
     return dst
 
 
+# One Stockfish file per part from the engine runs of run A and run B, each move once
 def merged_stockfish(part: str, tmp: Path) -> Path:
-    """One file with the Stockfish rows of a part, each move once, from the engine runs on this computer."""
     tables = []
-    for base in OLD_ENGINE_DIRS + [STOCKFISH_DIR]:
+    for base in ENGINE_DIRS:
         for f in sorted((base / part).glob("*.parquet")):
             tables.append(pq.read_table(f))
     if not tables:
@@ -112,11 +109,16 @@ def upload(packages: list[str], tmp: Path) -> None:
         for part in PARTS:
             print(f"stockfish {part}: merging the engine files")
             files[f"stockfish/{part}.parquet"] = merged_stockfish(part, tmp)
-        for base in OLD_ENGINE_DIRS + [STOCKFISH_DIR]:
-            meta = base / "train" / "engine.json"
-            if meta.exists():
-                files["stockfish/engine.json"] = meta
-                break
+        for base in ENGINE_DIRS:
+            for meta in (base / "engine.json", base / "train" / "engine.json"):
+                if meta.exists() and "stockfish/engine.json" not in files:
+                    files["stockfish/engine.json"] = meta
+    if "preprocessed" in packages:
+        for table, folder in FINAL_DIRS.items():
+            for f in FINAL_FILES:
+                if not (folder / f).exists():
+                    sys.exit(f"{folder / f} is missing: run src/02_preprocessing first")
+                files[f"preprocessed/{SELECTION}/{table}/{f}"] = folder / f
     total = sum(p.stat().st_size for p in files.values())
     print(f"uploading {len(files)} files, {total / 1e9:.2f} GB, to {bucket}/{folder()}/")
     for name, path in files.items():
@@ -129,10 +131,18 @@ def upload(packages: list[str], tmp: Path) -> None:
     print("done, manifest.json updated")
 
 
+# True for a file of one of the packages (of the final tables only those of our selection)
+def wanted(name: str, packages: list[str]) -> bool:
+    parts = name.split("/")
+    if parts[0] not in packages:
+        return False
+    return parts[0] != "preprocessed" or parts[1] == SELECTION
+
+
 def download(packages: list[str]) -> None:
     s3, bucket = client()
     man = manifest(s3, bucket)
-    names = [n for n in man["files"] if n.split("/")[0] in packages]
+    names = [n for n in man["files"] if wanted(n, packages)]
     if not names:
         sys.exit(f"nothing of {', '.join(packages)} under {bucket}/{folder()}/ yet")
     for name in names:
@@ -151,10 +161,18 @@ def download(packages: list[str]) -> None:
     print(f"{len(names)} files checked and in place")
 
 
+# Download a package that is missing; with IE500_SOURCE=scratch, name the step that makes it instead
+def fetch(package: str, step: str) -> None:
+    if SOURCE == "scratch":
+        sys.exit(f"the {package} files are missing and IE500_SOURCE=scratch: run {step} first")
+    print(f"no {package} files on this computer: downloading them from the team's server")
+    download([package])
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("action", choices=["download", "upload", "list"])
-    ap.add_argument("packages", nargs="*", default=[], help="cleanup, stockfish (default: both)")
+    ap.add_argument("packages", nargs="*", default=[], help="cleanup, stockfish, preprocessed (default: all)")
     args = ap.parse_args()
     packages = args.packages or PACKAGES
     unknown = [p for p in packages if p not in PACKAGES]

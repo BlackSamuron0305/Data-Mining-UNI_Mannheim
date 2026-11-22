@@ -8,18 +8,24 @@ IE500 Data Mining, University of Mannheim. Team 5: Predicting Blunders in Online
 - `submission/`: proposal, final paper and presentation (LaTeX)
 - `src/`: the code, with its settings in `config.yaml`, in the five steps of the data mining process (Fayyad et al., 1996)
   - `src/01_selection/`: getting the data and choosing the games
-    - `download/`: the raw files of September and August
+    - `download/`: the raw files of September and August, from our server or from Lichess (`storage.py`)
     - `preparation/cleanup/`: one pass over the month that drops unwanted games, counts moves and blunders per bucket and keeps a pool of games
     - `preparation/blunder_rates/`: the blunder probability per bucket of the month, with `plots.ipynb`
-    - `sampling/`: the `random`, `stratified` and `balanced` selection, each in its own folder, and the code they share in `shared/`
+    - `sampling/`: the `random`, `stratified` and `stratified_balanced` selection, each in its own folder, and the code they share in `common/`
     - `comparison/`: the three selections against the month, with `report.ipynb` (incl. the weights)
   - `src/02_preprocessing/`: the selected games turned into one row per move, the false predictors removed and the columns reduced
     - `common/`: the extraction (every column, incl. the false predictors), the list of false predictors, the leakage check, the inspection
     - `without_stockfish/`: preprocess, inspect (`report.ipynb`: correlation heatmap and decisions), reduce
     - `with_stockfish/`: the same with the 15 Stockfish columns; Stockfish comes from the team's server by default (its `README.md`)
+  - `src/03_transformation/encoding/`: turns the columns into what the models can use: gaps filled, numbers scaled, categories as 0/1 columns or as numbers for the trees (its `README.md`)
   - `src/04_data_mining/<method>/`: one folder per training method; `src/04_data_mining/common.py` holds what they share
   - `src/05_evaluation/`: scores every training run on the same moves
-  - `src/lichess/` (reading the Lichess files, the shared S3 data) and `src/shared/` (groups and buckets, scores) are used by several steps
+  - `src/common/`: code used by several steps
+    - `pgn.py`: reads a Lichess game (moves, clocks, evaluations, blunder marks); steps 1 and 2
+    - `server.py`: lists, downloads and uploads our prepared data on the team's server; steps 1 and 2, and on its own
+    - `buckets.py`: the groups of games and buckets of moves; steps 1 to 5
+    - `metrics.py`: the scores of the predictions; steps 4 and 5
+    - `plot_style.py`: colours and sizes of the figures; the notebooks of steps 1 and 2
 - `data/`: the selected games, built by the code and not tracked by git (see `data/README.md`)
 - `cache/`: working files of the code, not tracked by git
 
@@ -31,20 +37,63 @@ We use [uv](https://docs.astral.sh/uv/) as the package manager, not pip. In the 
 
 once. It installs Python 3.14 and the exact package versions of `uv.lock` into `.venv`. Run every script with `uv run`. Add a package with `uv add <name>`. `pyproject.toml`, `uv.lock` and `.python-version` are tracked by git; `.venv` is not.
 
-Copy `.env.example` to `.env` and fill in the keys of the team's Lichess storage (S3). That is all you need: see the quick start below. Only if you want to rebuild everything from the raw month: put the monthly file on your computer (downloaded as below, or set `LICHESS_LOCAL_DIR` to its folder), and for Stockfish install [Stockfish](https://stockfishchess.org/download/) and set `STOCKFISH_PATH` in `.env`.
+Copy `.env.example` to `.env`, then choose one of the two ways below with `IE500_SOURCE` there. The way from our server also needs the keys of the team's storage (S3) in `.env`; the way from scratch needs none.
 
-## Quick start: our prepared data, no 30 GB download, no Stockfish
+## Two ways to run
 
-The two slow steps ran once and their results are on the team's server, under `Data-Mining-Project/September 2026/`: the cleanup of the month (about 20 minutes and the 30 GB raw file; result about 650 MB) and Stockfish (about 15 hours on 16 cores; result about 1 GB). With the keys in `.env` the scripts download them by themselves when they are missing, so this is the whole pipeline up to the training:
+Both ways run the same code and give the same tables; they differ only in where the slow results come from. Each step is described in the sections after this one.
 
-    uv run python -m src.01_selection.preparation.blunder_rates.rates     # downloads the cleanup if needed
-    uv run python -m src.01_selection.sampling.stratified.select          # about 1 minute
-    uv run python -m src.02_preprocessing.common.extract                  # about 2 minutes
+| | from our server (`IE500_SOURCE=server`, the default) | from scratch (`IE500_SOURCE=scratch`) |
+|---|---|---|
+| needs | the keys in `.env` | Stockfish (`STOCKFISH_PATH` in `.env`), about 40 GB of disk |
+| raw month | not needed | 30 GB from Lichess |
+| cleanup of the month | downloaded (about 650 MB) | computed (about 20 minutes) |
+| selection | computed (about 1 minute) | computed (about 1 minute) |
+| preprocessing and Stockfish | the final tables downloaded (about 1.7 GB) | computed (Stockfish: about 15 hours on 16 cores) |
+| transformation, training, evaluation | computed | computed |
+
+Whatever a step needs and does not find, it downloads from the server, or, with `scratch`, it stops and names the step to run first. Downloads are checked against their sha256 and go to the same folders as the computed files, so the later steps cannot tell the difference.
+
+### From our server
+
+    uv run python -m src.01_selection.preparation.blunder_rates.rates     # downloads the cleanup
+    uv run python -m src.01_selection.sampling.stratified.select
+    export IE500_DATA=data_balanced IE500_SELECTION=balanced              # run B (balancing experiment)
+    uv run python -m src.01_selection.preparation.blunder_rates.rates
+    uv run python -m src.01_selection.sampling.stratified_balanced.select
+    unset IE500_DATA IE500_SELECTION
+    bash run_models.sh                                                    # downloads the final tables, trains, validates
+
+### From scratch
+
+    uv run python -m src.01_selection.download.september                  # 30 GB from Lichess
+    uv run python -m src.01_selection.preparation.cleanup.cleanup
+    uv run python -m src.01_selection.preparation.blunder_rates.rates
+    uv run python -m src.01_selection.sampling.stratified.select
+    uv run python -m src.02_preprocessing.common.extract
+    uv run python -m src.02_preprocessing.common.leakage_check
     uv run python -m src.02_preprocessing.without_stockfish.preprocess
-    uv run python -m src.02_preprocessing.with_stockfish.preprocess       # downloads Stockfish if needed
+    uv run python -m src.02_preprocessing.without_stockfish.inspection
+    uv run python -m src.02_preprocessing.without_stockfish.reduce
+    uv run python -m src.02_preprocessing.with_stockfish.engine           # about 15 hours
+    uv run python -m src.02_preprocessing.with_stockfish.preprocess
+    uv run python -m src.02_preprocessing.with_stockfish.inspection
     uv run python -m src.02_preprocessing.with_stockfish.reduce
+    export IE500_DATA=data_balanced IE500_SELECTION=balanced              # run B (balancing experiment)
+    uv run python -m src.01_selection.preparation.blunder_rates.rates
+    uv run python -m src.01_selection.sampling.stratified_balanced.select
+    uv run python -m src.02_preprocessing.common.extract
+    IE500_ENGINE_REUSE=data uv run python -m src.02_preprocessing.with_stockfish.engine   # only run B's new games
+    uv run python -m src.02_preprocessing.without_stockfish.preprocess
+    uv run python -m src.02_preprocessing.without_stockfish.reduce
+    uv run python -m src.02_preprocessing.with_stockfish.preprocess
+    uv run python -m src.02_preprocessing.with_stockfish.reduce
+    unset IE500_DATA IE500_SELECTION
+    bash run_models.sh
 
-To download on their own: `uv run python -m src.lichess.share download` (or `download cleanup`, `download stockfish`); `list` shows what is there. Every file is checked against its sha256. `upload` puts new versions on the server and needs a key that may write.
+Run B uses the column decisions of run A: its `reduce.py` removes the same columns, no new inspection.
+
+`uv run python -m src.common.server list` shows what is on the server; `download` fetches it on its own (`download cleanup`, `download stockfish`, `download preprocessed`). `upload` puts new versions there and needs a key that may write; `upload preprocessed` uploads the final tables of `IE500_SELECTION`.
 
 ## Data selection
 
@@ -54,7 +103,7 @@ To download on their own: `uv run python -m src.lichess.share download` (or `dow
     uv run python -m src.01_selection.preparation.blunder_rates.rates    # blunder probability per bucket into data/blunder_rates/; figures: plots.ipynb
     uv run python -m src.01_selection.sampling.random.select             # 350,000 games at random into data/selection/random/
     uv run python -m src.01_selection.sampling.stratified.select         # stratified by speed x Elo into data/selection/stratified/
-    uv run python -m src.01_selection.sampling.balanced.select           # stratified, training games balanced, into data/selection/balanced/
+    uv run python -m src.01_selection.sampling.stratified_balanced.select  # stratified, training games balanced, into data/selection/balanced/
     uv run python -m src.01_selection.comparison.compare                 # the three against the month into data/selection/comparison/; figures: report.ipynb
 
 Every selection writes its games (PGN and `games.csv` with each game's chance to be picked and its weight), tables and a `summary.md`. The later steps use the selection named by `IE500_SELECTION` (default `stratified`).
@@ -78,7 +127,7 @@ The leakage check cuts sample games at a random move, scrambles everything Liche
 
 ## Training
 
-Every method has its own folder in `src/04_data_mining/`, every run writes `data/runs/<method>/<name>/` (predictions of the held-out training games and of the test games, settings, model). Feature sets: `basic` (speed, Elo, clock), `context` (all features without the engine), `engine` (with the engine features; only the analysed games).
+Every method has its own folder in `src/04_data_mining/`, every run writes `data/runs/<method>/<name>/` (predictions of the held-out training games and of the test games, settings, model). Training reads the final tables of the preprocessing (downloaded if missing, see above). Feature sets: `basic` (speed, Elo, clock), `context` (every column of `data/preprocessing/without_stockfish/final/`), `engine` (every column of `data/preprocessing/with_stockfish/final/`). The columns come from the tables, so a column removed in `reduce.py` is gone from training too. Encoding: `src/03_transformation/`. `bash run_models.sh` runs every training and validation of the paper.
 
     uv run python -m src.04_data_mining.bucket_rate.train --source month               # baseline: the blunder probability of the move's bucket in the month
     uv run python -m src.04_data_mining.bucket_rate.train --source train               # the same from the training games only
@@ -95,7 +144,7 @@ Every method has its own folder in `src/04_data_mining/`, every run writes `data
 
 Hyperparameters are command-line options (`--help` of each method); give every setting its own `--name`, e.g. `--C 0.1 --name context_C0.1`, and choose between them with the validation below. Why each method is there: Chapter 4 of the final paper.
 
-`--max-games N` trains on a random subset of the training games for a quick run. A new method goes into a new folder `src/04_data_mining/<method>/train.py` with a `fit` function (and `DEFAULTS`, `SPACE`, `GRID` for the tuning) and saves its run with `save_run` of `src/04_data_mining/common.py`. A new categorical feature only needs its name in `CONTEXT` and `CATEGORICAL` there.
+`--max-games N` trains on a random subset of the training games for a quick run. A new method goes into a new folder `src/04_data_mining/<method>/train.py` with a `fit` function (and `DEFAULTS`, `SPACE`, `GRID` for the tuning) and saves its run with `save_run` of `src/04_data_mining/common.py`. A new text column needs its values in `CATEGORIES` of `src/03_transformation/encoding/categories.py`.
 
 ### Tuning, ablation, importance
 
@@ -121,9 +170,13 @@ In Git Bash (in PowerShell set `$env:IE500_DATA = "data_balanced"; $env:IE500_SE
 
     export IE500_DATA=data_balanced IE500_SELECTION=balanced
     uv run python -m src.01_selection.preparation.blunder_rates.rates
-    uv run python -m src.01_selection.sampling.balanced.select
+    uv run python -m src.01_selection.sampling.stratified_balanced.select
     uv run python -m src.02_preprocessing.common.extract
     IE500_ENGINE_REUSE=data uv run python -m src.02_preprocessing.with_stockfish.engine   # after run A's engine: only run B's new games
+    uv run python -m src.02_preprocessing.without_stockfish.preprocess
+    uv run python -m src.02_preprocessing.without_stockfish.reduce            # the same columns as run A
+    uv run python -m src.02_preprocessing.with_stockfish.preprocess
+    uv run python -m src.02_preprocessing.with_stockfish.reduce
     uv run python -m src.04_data_mining.bucket_rate.train --source month
     uv run python -m src.04_data_mining.gradient_boosting.train --features context    # and every other run of run A, same settings
     unset IE500_DATA IE500_SELECTION

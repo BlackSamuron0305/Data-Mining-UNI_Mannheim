@@ -1,21 +1,14 @@
-"""Balanced selection: the stratified selection, then training games swapped for pool games of the same group
-until every bucket has the month's blunder probability. The test games stay those of the stratified selection.
-
-Usage:  uv run python -m src.01_selection.sampling.balanced.select
-
-Writes to data/selection/balanced/. Swaps stay inside a group, so the games per group and the weights are those of
-the stratified selection.
-"""
+# Stratified selection, with the training games balanced to the month's blunder rates
 import logging
 import time
 
 import numpy as np
 
 from src.config import CFG, LOGS_SUB, setup_log
-from ..shared.pool import Pool
-from ..shared.split import TEST_FRAC, draw_stratified, test_part
-from ..shared.weights import chance_by_group
-from ..shared.write import folder, make_games, write_selection
+from ..common.pool import Pool
+from ..common.split import TEST_FRAC, draw_stratified, test_part
+from ..common.weights import chance_by_group
+from ..common.write import folder, make_games, write_selection
 from .swap import balance
 
 NAME = "balanced"

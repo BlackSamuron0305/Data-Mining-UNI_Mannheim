@@ -554,36 +554,54 @@ resamples of whole test games \cite{efron1993bootstrap}.
     \cmidrule(lr){2-3}\cmidrule(lr){4-5}
     Method & context & engine & context & engine & engine & engine & engine \\
     \midrule
-    Bucket rate (month) & \multicolumn{2}{c}{\tbd} & \multicolumn{2}{c}{\tbd} & \tbd & \tbd & \tbd \\
-    Best simple baseline (\tbd) & \multicolumn{2}{c}{\tbd} & \multicolumn{2}{c}{\tbd} & \tbd & \tbd & \tbd \\
-    Naive Bayes & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    Logistic regression & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    Linear SVM & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    Decision tree & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    Random forest & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    Gradient boosting & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    XGBoost & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    Neural network & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    Bucket rate (month) & \multicolumn{2}{c}{0.082} & \multicolumn{2}{c}{0.2062} & 0.636 & 0.139 & 1.80 \\
+    Best simple baseline (opponent just erred) & \multicolumn{2}{c}{0.107} & \multicolumn{2}{c}{0.1982} & 0.642 & 0.254 & 3.48 \\
+    Naive Bayes & 0.151 & 0.201 & 0.1949 & 0.1847 & 0.808 & 0.282 & 4.81 \\
+    Logistic regression & 0.197 & 0.235 & 0.1834 & 0.1714 & 0.834 & 0.312 & 5.51 \\
+    Linear SVM & 0.196 & 0.233 & 0.1848 & 0.1720 & 0.832 & 0.310 & 5.47 \\
+    Decision tree & 0.234 & 0.262 & 0.1718 & 0.1646 & 0.853 & 0.333 & 5.92 \\
+    Random forest & 0.250 & 0.289 & 0.1688 & 0.1599 & 0.866 & 0.355 & 6.35 \\
+    Gradient boosting & 0.263 & 0.317 & 0.1659 & 0.1551 & 0.878 & 0.374 & 6.74 \\
+    XGBoost & \textbf{0.267} & \textbf{0.321} & \textbf{0.1652} & \textbf{0.1545} & \textbf{0.879} & \textbf{0.377} & \textbf{6.80} \\
+    Neural network & 0.246 & 0.291 & 0.1691 & 0.1594 & 0.868 & 0.357 & 6.38 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \begin{figure}[tb]
   \centering
-  % data/validation/figures/: precision-recall, calibration, subgroups
-  \placeholder{3.6cm}{Figure, three panels: precision--recall curves and calibration of the bucket rate and
-    the best run of each method; PR-AUC of the best run and the baseline by speed, rating band, game phase
-    and time left, with 95\,\% intervals (\texttt{data/validation/figures/})}
-  \caption{Precision--recall, calibration and subgroups on the test games.}
+  \includegraphics[width=.72\textwidth]{figures/roc_pr}\\[.5em]
+  \includegraphics[width=.72\textwidth]{figures/subgroups_pr_auc}
+  \caption{Top: ROC and precision--recall curves on the test games for the bucket rate (dashed) and the
+    best runs with the engine features; the dots mark each run's cut-off chosen on the validation games.
+    Bottom: PR-AUC divided by the blunder rate of the subgroup (1 = guessing) by speed, rating, move number,
+    time left and the mover's win probability.}
   \label{fig:curves}
 \end{figure}
 
-Table~\ref{tab:results} and Figure~\ref{fig:curves} show the test scores. \res{Best method and its lead
-over the bucket rate, with interval; what the Stockfish features add, and whether equally for every
-method; linear against tree methods (interactions); forest against boosting (variance against bias);
-naive Bayes: order against calibration.} In a trial on 1,500 games before the full run, tuned XGBoost with
-the engine features reached a PR-AUC of 0.24 against 0.08 of the bucket rate, with a lift of about 6 among
-the riskiest 5\,\% of moves; the full run shows whether this holds.
+Table~\ref{tab:results} and Figure~\ref{fig:curves} show the test scores. \textbf{XGBoost with the engine
+features is the best run} in every column: PR-AUC 0.321 (95\,\% interval 0.318--0.323) against 0.082 of the
+bucket rate, and log loss 0.1545 against 0.2062, a quarter lower. Among the 5\,\% of moves it rates
+riskiest, 37\,\% are blunders, 6.8 times the overall rate, and they hold 34\,\% of all blunders; the bucket
+rate reaches a lift of 1.8 there. Gradient boosting follows closely (0.317); its interval overlaps XGBoost's
+only barely, and the two differ only in implementation. Every learner beats the bucket rate by far, even
+naive Bayes, and even the simplest rule ``the opponent just erred'' beats it in PR-AUC (0.107), a first
+sign of what the feature groups show below.
+
+\textbf{What Stockfish adds.} The engine features raise the PR-AUC of every method, by 0.03 to 0.05
+(XGBoost 0.267 to 0.321, outside both intervals); the gain is about the same for linear models and trees,
+so the engine's view of the choice is new information, not just a better form of the old.
+\textbf{Linear against trees.} Logistic regression and the SVM end far behind the tree ensembles (0.235
+against 0.321), although they see the same features: a large part of the risk lies in combinations, such
+as a sharp position \emph{after} the opponent's error, which a linear model cannot form. The SVM, fitted
+for a margin and calibrated afterwards, is no better than logistic regression. \textbf{Forest against
+boosting.} The random forest (0.289) stays clearly behind boosting even on the same five million moves
+(the XGBoost refit of the ablation on five million moves reaches 0.315), so the limit is bias, not variance:
+averaging deep trees does not find the many small effects that boosting adds up. The network (0.291) is level
+with the forest; smooth functions do not reveal effects the trees miss. \textbf{Naive Bayes} orders the
+moves fairly (ROC-AUC 0.81) but has the worst calibration of all learners (error 0.024 against 0.001 for
+boosting), as expected from its independence assumption; the readable tree of depth 4 (PR-AUC 0.198, lift
+5.3) already beats it.
 
 \section{Balanced or Not: Run A Against Run B}
 \label{sec:balancing}
@@ -599,10 +617,14 @@ the riskiest 5\,\% of moves; the full run shows whether this holds.
     \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(l){6-7}
     Method & A & B & A & B & A & B \\
     \midrule
-    Logistic regression & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    Gradient boosting & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    XGBoost & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    Neural network & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    Naive Bayes & 0.201 & 0.201 & 0.1847 & 0.1847 & 0.0243 & 0.0244 \\
+    Logistic regression & 0.235 & 0.236 & 0.1714 & 0.1714 & 0.0027 & 0.0027 \\
+    Linear SVM & 0.233 & 0.232 & 0.1720 & 0.1721 & 0.0027 & 0.0026 \\
+    Decision tree & 0.262 & 0.262 & 0.1646 & 0.1646 & 0.0008 & 0.0007 \\
+    Random forest & 0.289 & 0.289 & 0.1599 & 0.1599 & 0.0036 & 0.0035 \\
+    Gradient boosting & 0.317 & 0.317 & 0.1551 & 0.1552 & 0.0009 & 0.0009 \\
+    XGBoost & 0.321 & 0.321 & 0.1545 & 0.1545 & 0.0007 & 0.0007 \\
+    Neural network & 0.291 & 0.289 & 0.1594 & 0.1599 & 0.0030 & 0.0015 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -610,8 +632,16 @@ the riskiest 5\,\% of moves; the full run shows whether this holds.
 If balancing only removed chance deviations, the models of run B would be at least as good as those of run
 A (Table~\ref{tab:balancing}); if it bent the relations it does not watch, they would be worse, most
 visibly in calibration within subgroups that cut across the buckets, such as after an opponent's error.
-\res{Result, with intervals of the difference from resampling games; which argument of
-Section~\ref{sec:selection} the data support.}
+Neither happened. For all eight methods, with both feature sets, the scores of A and B agree to the third
+decimal: PR-AUC differs by at most 0.003 (the network, the method with the most chance in its training),
+log loss by at most 0.0005, both far inside the 95\,\% intervals of a single run (about $\pm$0.0024 in
+PR-AUC). Within the subgroups of speed, rating, phase, time left and position, XGBoost's PR-AUC differs by
+at most 0.001 and its calibration by at most 0.0005. So the data support neither the hope nor the fear of
+Section~\ref{sec:selection}. The reason is plain once the results are in: the models see speed, rating and
+time left themselves, so a sample whose bucket rates match the month exactly teaches them nothing they
+cannot learn from a random sample of 18.7 million moves, and swapping 6.6\,\% of the games is too little to
+bend anything else. Balancing costs a second selection and raises a question every reader would ask;
+a stratified random draw is enough.
 
 \section{What the Models Use and Where They Fail}
 \label{sec:importance}
@@ -694,9 +724,17 @@ our yardstick.
 \chapter{Results}
 \label{ch:results}
 
-\res{The answer in one paragraph: by how much the best model beats the bucket rate in PR-AUC and log loss
-on unseen games, and what it means in practice: among the 5\,\% of moves it flags, \tbd\,\% are blunders,
-against \tbd\,\% overall. What carries the signal; the rules of the tree; balanced or not.}
+Yes, a blunder can be foreseen in part before the move is played. On 69,998 unseen games, XGBoost with
+our engine features reaches a PR-AUC of 0.321 against 0.082 for the blunder rate per speed, rating and
+time left, and a log loss a quarter lower (0.1545 against 0.2062). In practice: among the 5\,\% of moves it
+rates riskiest, 37\,\% are blunders, against 5.5\,\% overall, and these moves hold a third of all blunders
+(goal~1). The signal lies in the position and the course of the game, not in the clock: how many moves lose
+in the position is the strongest group, what happened in the last moves the second, while time left and
+rating add little once these are known. The readable tree says the same in rules: right after an opponent's
+blunder, in a sharp position, a third of the moves are blunders, often missed chances to punish it, while in
+a calm game hardly any are (goal~2). The lead over the baseline holds in every speed, rating band, game
+phase and band of time left (goal~3). Balancing the training games towards the month's blunder rates changed
+no model; a stratified random draw is enough (goal~4).
 
 \textbf{Limitations.} Only analysed games have labels, and players do not analyse games at random (a lost
 game, a memorable error), so our rates may differ from those of all games. The labels come from Lichess's
@@ -704,8 +742,12 @@ server analysis, our engine features from a shallower search. One month cannot s
 and the same players occur in training and test games, so a model may partly learn their habits; a split
 by player would test this.
 
-\textbf{Use.} \res{Whether a training tool or a broadcast could use it: a risk with a lift of \tbd{} ranks
-the dangerous moments of a game well, but is no reliable warning before every single blunder.}
+\textbf{Use.} A risk with a lift of 6.8 ranks the dangerous moments of a game well: a broadcast could show
+viewers when a position is a trap for the humans at the board, and a training tool could show a player the
+kind of moment in which they tend to blunder, such as the move after the opponent's mistake. It is no
+reliable warning before every single blunder: at its cut-off the model catches 47\,\% of the blunders, and
+two of three flagged moves are fine. Half of the blunders come ``out of nowhere'', in quiet positions, and
+no model of the situation before the move will see them.
 
 \bibliography{references}
 

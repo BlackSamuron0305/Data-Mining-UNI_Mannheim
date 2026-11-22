@@ -7,10 +7,8 @@ import argparse
 
 from sklearn.naive_bayes import GaussianNB
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import QuantileTransformer, StandardScaler
 
-from src.config import SEED
-from ..common import FEATURE_SETS, TRAIN, Fitted, features, fit_and_save, numeric_prep, target
+from ..common import FEATURE_SETS, TRAIN, Fitted, features, fit_and_save, numeric_prep, scaler, target
 
 METHOD = "naive_bayes"
 DEFAULTS = {"transform": "quantile", "var_smoothing": 1e-2}
@@ -19,18 +17,14 @@ GRID = {"transform": ["quantile", "standard"], "var_smoothing": [1e-3, 1e-2, 1e-
 
 
 def fit(fit_df, valid_df, cols, transform="quantile", var_smoothing=1e-2):
-    if transform == "quantile":
-        scaler = QuantileTransformer(output_distribution="normal", subsample=200_000, random_state=SEED)
-    else:
-        scaler = StandardScaler()
-    m = Pipeline([("prep", numeric_prep(cols, scaler)), ("nb", GaussianNB(var_smoothing=var_smoothing))])
+    m = Pipeline([("prep", numeric_prep(cols, scaler(transform))), ("nb", GaussianNB(var_smoothing=var_smoothing))])
     m.fit(features(fit_df, cols), target(fit_df))
     return Fitted(m, cols)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--features", choices=list(FEATURE_SETS), default="context")
+    ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--transform", choices=["quantile", "standard"], default=DEFAULTS["transform"])
     ap.add_argument("--var-smoothing", type=float, default=DEFAULTS["var_smoothing"])
     ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])

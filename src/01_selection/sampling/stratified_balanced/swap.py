@@ -1,11 +1,10 @@
-"""Swap selected games for pool games of the same group until every bucket has the month's blunder rate."""
+# Swap training games until every bucket has the month's blunder rate
 import numpy as np
 
 from src.config import SEED
 
 
 def balance(sel, pool, groups, ent, rate, share, seed: int) -> tuple[np.ndarray, dict]:
-    """Swap games of `sel` for pool games of the same group until every bucket's blunder rate matches `rate`."""
     rng = np.random.default_rng([SEED, 7, seed])
     sel = sel.copy()
     tries, patience, max_proposals = 32, 20_000, 1_500_000

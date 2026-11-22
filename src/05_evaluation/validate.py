@@ -17,7 +17,7 @@ from sklearn.metrics import average_precision_score
 
 from src.config import CFG, DATA, GAMES_SUB, ROOT, RUNS_DIR, SELECTION_DIR, VALIDATION_DIR
 from src.config import KEYS, TARGET
-from src.shared.metrics import best_cutoff, calibration, decisions, move_loss, scores, top_name
+from src.common.metrics import best_cutoff, calibration, decisions, move_loss, scores, top_name
 from . import bootstrap, errors, figures
 from .groups import DIMENSIONS, SOURCE, aligned, bands, positions
 

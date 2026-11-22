@@ -1,8 +1,4 @@
-"""Read a raw Lichess monthly file one zstd frame at a time, from a local folder or from the team's S3 storage,
-or download it into the local folder.
-
-The local folder is LICHESS_LOCAL_DIR (environment or .env), else source.local_dir of config.yaml, else cache/raw/.
-"""
+# Download the raw month, or read it piece by piece from this computer or our server
 from __future__ import annotations
 
 import hashlib
@@ -19,7 +15,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from urllib3.exceptions import HTTPError
 
-from src.config import CFG, ROOT, env, s3_settings
+from src.config import CFG, ROOT, SOURCE, env, s3_settings
 
 log = logging.getLogger("storage")
 ZSTD_MAGIC = 0xFD2FB528
@@ -27,31 +23,32 @@ SKIPPABLE_MAGIC = 0x184D2A50
 RETRIES = 8
 BUFFER = 8 << 20
 DOWNLOAD = TransferConfig(multipart_threshold=64 << 20, multipart_chunksize=64 << 20, max_concurrency=16)
-SHA256_URL = "https://database.lichess.org/standard/sha256sums.txt"
+LICHESS_URL = "https://database.lichess.org/standard/"
+SHA256_URL = LICHESS_URL + "sha256sums.txt"
 
 
 def month_key(month: str) -> str:
     return CFG["source"]["key"].format(month=month)
 
 
+# Folder for the raw months on this computer
 def local_dir() -> Path:
-    """The folder for the monthly files on this computer."""
     folder = Path(env("LICHESS_LOCAL_DIR") or CFG["source"].get("local_dir") or "cache/raw")
     if not folder.is_absolute():
         folder = ROOT / folder
     return folder
 
 
+# The raw month on this computer, or None
 def local_file(month: str) -> Path | None:
-    """The monthly file in the local folder, or None."""
     path = local_dir() / month_key(month)
     if path.is_file():
         return path
     return None
 
 
+# Checksum that Lichess publishes for a file (None if Lichess cannot be reached)
 def lichess_sha256(name: str) -> str | None:
-    """The sha256 that Lichess publishes for a monthly file (None if Lichess cannot be reached)."""
     try:
         with urllib.request.urlopen(SHA256_URL, timeout=30) as response:
             text = response.read().decode("utf-8")
@@ -65,24 +62,17 @@ def lichess_sha256(name: str) -> str | None:
     return None
 
 
-def download(month: str) -> Path:
-    """Copy a monthly file from S3 into the local folder, in many parts at once, and check it."""
-    name = month_key(month)
-    dst = local_dir() / name
-    s = s3_settings()
-    s3 = boto3.client("s3", endpoint_url=s["LICHESS_S3_ENDPOINT"], aws_access_key_id=s["LICHESS_S3_ACCESS_KEY"],
-                      aws_secret_access_key=s["LICHESS_S3_SECRET_KEY"], region_name="us-east-1",
-                      config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 10}))
-    size = s3.head_object(Bucket=s["LICHESS_S3_BUCKET"], Key=name)["ContentLength"]
-    if dst.is_file() and dst.stat().st_size == size:
-        log.info("%s is already there", dst)
-        return dst
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    log.info("downloading %s (%.1f GB) to %s", name, size / 1e9, dst.parent)
-    t0 = time.time()
-    # boto3 writes to a temporary name and renames it at the end, so a stopped download leaves no half file
-    s3.download_file(s["LICHESS_S3_BUCKET"], name, str(dst), Config=DOWNLOAD)
-    log.info("done in %.1f minutes, checking the sha256", (time.time() - t0) / 60)
+# Download a raw month from Lichess (slower than our server, but needs no key)
+def download_from_lichess(name: str, dst: Path) -> None:
+    tmp = dst.with_name(dst.name + ".part")
+    with urllib.request.urlopen(LICHESS_URL + name, timeout=60) as response, open(tmp, "wb") as f:
+        while chunk := response.read(BUFFER):
+            f.write(chunk)
+    tmp.replace(dst)
+
+
+# Compare the file with Lichess's checksum and delete it if they differ
+def check_sha256(name: str, dst: Path) -> None:
     h = hashlib.sha256()
     with open(dst, "rb") as f:
         while chunk := f.read(BUFFER):
@@ -95,11 +85,42 @@ def download(month: str) -> Path:
         raise ValueError(f"{name}: the sha256 differs from Lichess's, file deleted; try again")
     else:
         log.info("sha256 matches Lichess's")
+
+
+# Download a raw month: from our server, or from Lichess with IE500_SOURCE=scratch
+def download(month: str) -> Path:
+    name = month_key(month)
+    dst = local_dir() / name
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if SOURCE == "scratch":
+        if dst.is_file():
+            log.info("%s is already there", dst)
+            return dst
+        log.info("downloading %s from Lichess to %s", name, dst.parent)
+        t0 = time.time()
+        download_from_lichess(name, dst)
+        log.info("done in %.1f minutes, checking the sha256", (time.time() - t0) / 60)
+        check_sha256(name, dst)
+        return dst
+    s = s3_settings()
+    s3 = boto3.client("s3", endpoint_url=s["LICHESS_S3_ENDPOINT"], aws_access_key_id=s["LICHESS_S3_ACCESS_KEY"],
+                      aws_secret_access_key=s["LICHESS_S3_SECRET_KEY"], region_name="us-east-1",
+                      config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 10}))
+    size = s3.head_object(Bucket=s["LICHESS_S3_BUCKET"], Key=name)["ContentLength"]
+    if dst.is_file() and dst.stat().st_size == size:
+        log.info("%s is already there", dst)
+        return dst
+    log.info("downloading %s (%.1f GB) to %s", name, size / 1e9, dst.parent)
+    t0 = time.time()
+    # a stopped download leaves no half file
+    s3.download_file(s["LICHESS_S3_BUCKET"], name, str(dst), Config=DOWNLOAD)
+    log.info("done in %.1f minutes, checking the sha256", (time.time() - t0) / 60)
+    check_sha256(name, dst)
     return dst
 
 
+# A file on our server, read from start to end; continues where it stopped if the connection drops
 class S3File(io.RawIOBase):
-    """A file on S3, read front to back; a dropped connection continues at the same byte."""
 
     def __init__(self, key: str):
         s = s3_settings()
@@ -140,11 +161,13 @@ class S3File(io.RawIOBase):
         return 0
 
 
+# A raw month; frames() gives its pieces in order
 class MonthFile:
-    """A monthly file; `frames()` yields its zstd frames in order and then sets `sha256`."""
 
     def __init__(self, month: str):
         local = local_file(month)
+        if local is None and SOURCE == "scratch":
+            local = download(month)
         if local is not None:
             self.raw = io.FileIO(local, "rb")
             self.key = local.name
@@ -157,8 +180,8 @@ class MonthFile:
             self.location = f"{self.raw.endpoint}/{self.raw.bucket}/{self.key}"
         self.sha256 = None
 
+    # The pieces of the file (only the first `limit` if given)
     def frames(self, limit: int | None = None) -> Iterator[bytes]:
-        """The zstd frames of the file (skippable frames left out); only the first `limit` if given."""
         f = io.BufferedReader(self.raw, BUFFER)
         sha = hashlib.sha256()
         pos = 0

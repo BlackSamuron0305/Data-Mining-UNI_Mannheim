@@ -1,9 +1,4 @@
-"""The blunder probability of every bucket of moves, from the counts of the cleanup.
-
-Usage:  uv run python -m src.01_selection.preparation.blunder_rates.rates
-
-Writes to data/blunder_rates/.
-"""
+# Blunder rate of every bucket of the month
 import json
 import logging
 
@@ -11,15 +6,15 @@ import numpy as np
 import pandas as pd
 
 from src.config import BLUNDER_RATES_DIR, CLEANUP_DIR, LOGS_SUB, MONTH, setup_log
-from src.lichess.share import download
-from src.shared.buckets import SPEEDS, shrunk, time_order
+from src.common.server import fetch
+from src.common.buckets import SPEEDS, shrunk, time_order
 from .intervals import add_rates
 
 log = logging.getLogger("blunder_rates")
 
 
+# Blunder rate of every bucket, with the baseline rate
 def bucket_rates() -> pd.DataFrame:
-    """Blunder probability per bucket of the month, with the baseline probability and its fallback."""
     bt = pd.read_csv(CLEANUP_DIR / "buckets.csv", index_col="bucket")
     out = add_rates(bt[["speed", "mover_elo", "time_left", "moves", "blunders", "games", "few_games"]].copy())
     by_elo = bt.groupby(["speed", "mover_elo"])[["moves", "blunders"]].transform("sum")
@@ -31,9 +26,8 @@ def bucket_rates() -> pd.DataFrame:
     return out
 
 
+# Moves and blunders per speed and time left, all ratings together
 def by_time_left(df: pd.DataFrame, cols: dict[str, tuple[str, str]]) -> pd.DataFrame:
-    """Moves and blunders summed over the Elo bands, per speed and time step; `cols` maps a suffix to the
-    (moves, blunders) columns."""
     sums = []
     for m, k in cols.values():
         sums += [m, k]
@@ -49,8 +43,7 @@ def by_time_left(df: pd.DataFrame, cols: dict[str, tuple[str, str]]) -> pd.DataF
 def run() -> None:
     meta_path = CLEANUP_DIR / "cleanup.json"
     if not meta_path.exists():
-        print("no cleanup on this computer: downloading it from the team's server")
-        download(["cleanup"])
+        fetch("cleanup", "the cleanup (src/01_selection/preparation/cleanup/cleanup.py)")
     cleanup = json.loads(meta_path.read_text(encoding="utf-8"))
     (BLUNDER_RATES_DIR / LOGS_SUB).mkdir(parents=True, exist_ok=True)
     setup_log(BLUNDER_RATES_DIR / LOGS_SUB / "rates.log")

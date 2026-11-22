@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import GAMES_SUB, LOGS_SUB, SEED, SELECTION_DIR, setup_log
-from src.lichess.pgn import iter_pgn, read_game, time_control
+from src.common.pgn import iter_pgn, read_game, time_control
 from .extract import game_features
 from .false_predictors import FALSE_PREDICTORS
 from .paths import PRE_DIR

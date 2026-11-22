@@ -12,7 +12,7 @@ source:
                              # the file is there; LICHESS_LOCAL_DIR (or .env) overrides it. The download scripts of
                              # src/01_selection/ put the files there
 
-filters:                     # complete cases (src/lichess/pgn.py)
+filters:                     # complete cases (src/01_selection/preparation/cleanup/filters.py)
   speeds: [bullet, blitz, rapid, classical]      # ultrabullet and correspondence are dropped
   terminations: [Normal, Time forfeit]           # abandoned games and rule infractions are dropped
   min_plies: 20                                  # at least 10 moves by each player
@@ -86,7 +86,3 @@ evaluation:
   move_bands: [10, 20, 30, 40]          # game phase by move number: 1-10, 11-20, 21-30, 31-40, 41+
   clock_bands: [0.1, 0.25, 0.5, 0.75]   # time left / (start time + 40 x increment): below 10%, 10-25%, ..., 75% and above
   eval_bands: [0.1, 0.3, 0.7, 0.9]      # the mover's win probability before the move: 0-10%, 10-30%, ..., 90-100%
-
-share:
-  # Our built data on the team's S3 storage (src/lichess/share.py): raw.tar, features.tar, manifest.json
-  prefix: ie500/2026-09

@@ -26,7 +26,7 @@ def fit(fit_df, valid_df, cols, C=1.0):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--features", choices=list(FEATURE_SETS), default="context")
+    ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--C", type=float, default=DEFAULTS["C"], help="inverse strength of the L2 penalty")
     ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
     ap.add_argument("--name", default=None)

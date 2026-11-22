@@ -8,7 +8,7 @@ stratified and the balanced selection and put the result on the team's server. W
 
     uv run python -m src.02_preprocessing.with_stockfish.preprocess
 
-To download it on its own: `uv run python -m src.lichess.share download stockfish`.
+To download it on its own: `uv run python -m src.common.server download stockfish`.
 
 **From scratch** (only if you change the engine settings or the selection): install Stockfish, set
 `STOCKFISH_PATH` in `.env`, then

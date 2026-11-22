@@ -25,7 +25,9 @@ SELECTION = os.environ.get("IE500_SELECTION") or "stratified"
 SELECTION_ROOT = DATA / "selection"
 SELECTION_DIR = SELECTION_ROOT / SELECTION
 COMPARISON_DIR = SELECTION_ROOT / "comparison"
-FEATURES_DIR = DATA / "features"
+PREPROCESSING_DIR = DATA / "preprocessing"
+FINAL_DIRS = {"without_stockfish": PREPROCESSING_DIR / "without_stockfish" / "final",
+              "with_stockfish": PREPROCESSING_DIR / "with_stockfish" / "final"}
 RUNS_DIR = DATA / "runs"
 VALIDATION_DIR = DATA / "validation"
 GAMES_SUB = "games"
@@ -52,6 +54,12 @@ def dotenv() -> dict[str, str]:
 def env(name: str) -> str | None:
     """An environment variable, else its value in .env, else None."""
     return os.environ.get(name) or dotenv().get(name) or None
+
+
+# IE500_SOURCE: "server" (default) downloads what is missing from the team's server, "scratch" computes everything
+SOURCE = env("IE500_SOURCE") or "server"
+if SOURCE not in ("server", "scratch"):
+    raise ValueError(f"IE500_SOURCE must be server or scratch, not {SOURCE!r}")
 
 
 def s3_settings() -> dict[str, str]:

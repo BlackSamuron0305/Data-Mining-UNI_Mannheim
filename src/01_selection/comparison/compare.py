@@ -1,10 +1,4 @@
-"""Compare the random, stratified and balanced selection with the month, bucket by bucket, and with fresh
-stratified draws that show how far a selection may stray from the month by chance.
-
-Usage:  uv run python -m src.01_selection.comparison.compare      (after the blunder rates and the selections)
-
-Writes to data/selection/comparison/.
-"""
+# Compare the three selections with the whole month
 import json
 import logging
 
@@ -15,8 +9,8 @@ from src.config import (BLUNDER_RATES_DIR, CFG, COMPARISON_DIR, LOGS_SUB, SEED, 
                         TABLES_SUB, setup_log)
 from ..preparation.blunder_rates.intervals import add_rates
 from ..preparation.blunder_rates.rates import by_time_left
-from ..sampling.shared.pool import Pool
-from ..sampling.shared.split import draw_stratified, test_part
+from ..sampling.common.pool import Pool
+from ..sampling.common.split import draw_stratified, test_part
 
 log = logging.getLogger("comparison")
 PARTS = ("train", "test")
@@ -24,8 +18,8 @@ DRAWS = int(CFG["selection"]["check_draws"])
 N = CFG["selection"]["n_games"]
 
 
+# How far one part is from the month, overall and per bucket
 def part_stats(m, k, p, month_moves) -> tuple[dict, np.ndarray]:
-    """Statistics of one part against the month, and z per bucket (NaN where the part has no move)."""
     m, k = m.astype(float), k.astype(float)
     ok = (m > 0) & (p > 0) & (p < 1)
     z = np.full(len(m), np.nan)
@@ -40,8 +34,8 @@ def part_stats(m, k, p, month_moves) -> tuple[dict, np.ndarray]:
     return stats, z
 
 
+# The same for fresh stratified draws, to see how far chance alone goes
 def fresh_draws(p, month_moves) -> dict:
-    """Statistics of DRAWS fresh stratified draws of the same size, per part."""
     pool = Pool()
     group_games = pool.groups["games"].to_numpy()
     out = {"train": [], "test": []}
@@ -63,8 +57,8 @@ def draw_summary(draws: list[dict]) -> dict:
             "mean_abs_diff_pp": float(np.mean([d["mean_abs_diff_pp"] for d in draws])), "all": draws}
 
 
+# Chance and weight of each group, for every selection
 def weights_table(names: list[str]) -> pd.DataFrame:
-    """Chance and weight per group of every selection."""
     rows = []
     for name in names:
         g = pd.read_csv(SELECTION_ROOT / name / TABLES_SUB / "groups.csv", index_col="group")

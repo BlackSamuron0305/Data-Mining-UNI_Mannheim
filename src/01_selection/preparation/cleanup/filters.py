@@ -1,4 +1,4 @@
-"""The rules that decide which games of the month we keep."""
+# Which games of the month we keep
 import io
 import re
 from collections import Counter
@@ -9,7 +9,7 @@ import chess.pgn
 import numpy as np
 
 from src.config import CFG
-from src.lichess.pgn import SPEED_RE, read_game
+from src.common.pgn import SPEED_RE, read_game
 
 FILTERS = CFG["filters"]
 STEPS = ["scanned", "speed bullet-classical", "has engine evaluations", "passes filters", "complete case"]
@@ -25,16 +25,16 @@ class Game(NamedTuple):
     blunder: np.ndarray
 
 
+# Split the text into single games
 def split_games(text: str) -> Iterator[str]:
-    """The unchanged text of every game in `text`."""
     starts = [m.start() for m in GAME_START_RE.finditer(text)]
     starts.append(len(text))
     for i in range(len(starts) - 1):
         yield text[starts[i]:starts[i + 1]]
 
 
+# Return the game if it passes every filter, else None
 def complete_game(pgn: str, funnel: Counter) -> Game | None:
-    """The game if it is a complete case, else None. Counts the filter steps passed in `funnel`."""
     headers = chess.pgn.read_headers(io.StringIO(pgn))
     if headers is None:
         return None

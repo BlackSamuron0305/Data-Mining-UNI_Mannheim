@@ -3,7 +3,8 @@
 Usage:  uv run python -m src.02_preprocessing.with_stockfish.preprocess   (after without_stockfish/preprocess.py)
 Output: data/preprocessing/with_stockfish/clean/train.parquet, test.parquet
 
-If the Stockfish files are not on this computer, they are downloaded from the team's server (needs .env).
+If the Stockfish files are not on this computer, they are downloaded from the team's server (needs .env),
+unless IE500_SOURCE=scratch.
 """
 import logging
 
@@ -11,7 +12,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from src.config import setup_log
-from src.lichess.share import download
+from src.common.server import fetch
 from ..common.paths import KEYS, PARTS, STOCKFISH_DIR, WITH_DIR, WITHOUT_DIR
 
 log = logging.getLogger("with_stockfish")
@@ -35,8 +36,7 @@ def run() -> None:
     WITH_DIR.mkdir(parents=True, exist_ok=True)
     setup_log(WITH_DIR / "preprocess.log")
     if not all(stockfish_files(part) for part in PARTS):
-        log.info("no Stockfish files here: downloading them from the team's server")
-        download(["stockfish"])
+        fetch("stockfish", "src/02_preprocessing/with_stockfish/engine.py")
     for part in PARTS:
         src = WITHOUT_DIR / "clean" / f"{part}.parquet"
         if not src.exists():

@@ -1,7 +1,4 @@
-"""Read Lichess games (PGN text) with python-chess.
-
-Lichess writes the clock as [%clk], the evaluation as [%eval] and marks a blunder with ??.
-"""
+# Read a Lichess game: moves, clocks ([%clk]), evaluations ([%eval]) and blunder marks (??)
 from __future__ import annotations
 
 import io
@@ -22,8 +19,8 @@ CP_CAP = 1000
 WIN_K = 0.00368208
 
 
+# Every game in a .pgn.zst file, as text
 def iter_pgn(path) -> Iterator[str]:
-    """The unchanged text of every game in a .pgn.zst file."""
     lines = []
     with zstd.open(path, "rt", encoding="utf-8") as f:
         for line in f:
@@ -35,8 +32,8 @@ def iter_pgn(path) -> Iterator[str]:
         yield "".join(lines)
 
 
+# Start time and increment in seconds, from a TimeControl such as '180+2'
 def time_control(tc: str) -> tuple[int, int]:
-    """Start time and increment in seconds of a TimeControl such as '180+2'."""
     base, _, inc = tc.partition("+")
     return int(base), int(inc or 0)
 
@@ -45,8 +42,8 @@ def capped_cp(score: chess.engine.Score) -> int:
     return max(-CP_CAP, min(CP_CAP, score.score(mate_score=100_000)))
 
 
+# Win probability (0 to 1) as Lichess computes it
 def win_prob(cp) -> np.ndarray:
-    """Win probability (0 to 1) as Lichess computes it."""
     cp = np.clip(np.asarray(cp, dtype=float), -CP_CAP, CP_CAP)
     return 1.0 / (1.0 + np.exp(-WIN_K * cp))
 

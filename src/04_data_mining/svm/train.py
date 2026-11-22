@@ -10,7 +10,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 
 from src.config import SEED
-from src.shared.metrics import scores
+from src.common.metrics import scores
 from ..common import (FEATURE_SETS, TRAIN, Fitted, features, fit_and_save, numeric_prep, split_games,
                                  target)
 
@@ -87,7 +87,7 @@ def fit(fit_df, valid_df, cols, alpha=1e-5, calibration_frac=0.2, max_epochs=50,
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--features", choices=list(FEATURE_SETS), default="context")
+    ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--alpha", type=float, default=DEFAULTS["alpha"], help="strength of the L2 penalty")
     ap.add_argument("--calibration-frac", type=float, default=DEFAULTS["calibration_frac"],
                     help="share of the fitting games for the Platt scaling")

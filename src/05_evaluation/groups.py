@@ -1,6 +1,6 @@
 """Subgroups of the moves (speed, Elo band, move number, time left, win probability) for validate.py and errors.py.
 
-The columns come from data/features/positions/<train|test>.parquet; the bands are set in config.yaml (evaluation).
+The columns come from data/preprocessing/without_stockfish/final/<train|test>.parquet; the bands are set in config.yaml (evaluation).
 """
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
-from src.config import CFG, FEATURES_DIR, KEYS
-from src.shared.buckets import N_E, SPEEDS, elo_bin, elo_label
+from src.config import CFG, FINAL_DIRS, KEYS
+from src.common.buckets import N_E, SPEEDS, elo_bin, elo_label
 
 EV = CFG["evaluation"]
 SOURCE = ["speed", "mover_elo", "move_no", "clock_rel", "eval_wp"]
@@ -20,9 +20,9 @@ DIMENSIONS = {"speed": "speed", "elo_band": "Elo of the mover", "phase": "move n
 def positions(part: str, columns: list[str], game_ids=None) -> pd.DataFrame | None:
     """The columns of the moves of a part ('valid' reads the training moves), only of the given games."""
     if part == "test":
-        path = FEATURES_DIR / "positions" / "test.parquet"
+        path = FINAL_DIRS["without_stockfish"] / "test.parquet"
     else:
-        path = FEATURES_DIR / "positions" / "train.parquet"
+        path = FINAL_DIRS["without_stockfish"] / "train.parquet"
     if not path.exists():
         return None
     have = set(pq.read_schema(path).names)

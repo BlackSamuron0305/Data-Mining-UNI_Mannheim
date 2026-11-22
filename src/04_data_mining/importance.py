@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import RUNS_DIR, SEED, VALIDATION_DIR
-from src.shared.metrics import scores
+from src.common.metrics import scores
 from .common import TARGET, TUNING, Fitted, folds, groups_of, load
 
 

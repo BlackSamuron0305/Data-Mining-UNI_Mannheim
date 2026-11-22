@@ -1,17 +1,12 @@
-"""Stratified selection: every group (speed x Elo) gets as many games as its share of the month.
-
-Usage:  uv run python -m src.01_selection.sampling.stratified.select
-
-Writes to data/selection/stratified/.
-"""
+# Stratified selection: every group gets its share of the month
 import logging
 import time
 
 from src.config import CFG, LOGS_SUB, setup_log
-from ..shared.pool import Pool
-from ..shared.split import draw_stratified, test_part
-from ..shared.weights import chance_by_group
-from ..shared.write import folder, make_games, write_selection
+from ..common.pool import Pool
+from ..common.split import draw_stratified, test_part
+from ..common.weights import chance_by_group
+from ..common.write import folder, make_games, write_selection
 
 NAME = "stratified"
 N = CFG["selection"]["n_games"]

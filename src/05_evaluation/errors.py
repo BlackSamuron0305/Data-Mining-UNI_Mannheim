@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import TARGET
-from src.shared.metrics import f32
+from src.common.metrics import f32
 from .groups import DIMENSIONS
 
 CELLS = ["caught", "missed", "false alarm", "quiet"]

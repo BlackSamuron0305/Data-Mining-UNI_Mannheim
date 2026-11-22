@@ -1,4 +1,4 @@
-"""Colours and sizes of our figures."""
+# Colours and sizes of our figures, used by the notebooks
 import matplotlib.pyplot as plt
 
 WIDTH = 14.5 / 2.54
@@ -17,8 +17,8 @@ plt.rcParams.update({
 })
 
 
+# Save a figure as pdf and png
 def save(fig, folder, name: str) -> None:
-    """Save a figure as pdf and png."""
     folder.mkdir(parents=True, exist_ok=True)
     fig.savefig(folder / f"{name}.pdf", dpi=300)
     fig.savefig(folder / f"{name}.png", dpi=300)

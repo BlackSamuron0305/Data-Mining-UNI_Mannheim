@@ -1,12 +1,12 @@
-"""The 95% interval of a blunder probability."""
+# 95% intervals for blunder rates
 import numpy as np
 import pandas as pd
 
 Z95 = 1.959964
 
 
+# Wilson interval for k blunders in n moves
 def wilson(k, n, z: float = Z95) -> tuple[np.ndarray, np.ndarray]:
-    """95% Wilson interval of a probability with k hits in n trials (NaN for n = 0)."""
     k = np.asarray(k, dtype=float)
     n = np.asarray(n, dtype=float)
     with np.errstate(invalid="ignore", divide="ignore"):
@@ -18,8 +18,8 @@ def wilson(k, n, z: float = Z95) -> tuple[np.ndarray, np.ndarray]:
         return lo, hi
 
 
+# Add the rate and its interval as columns
 def add_rates(df: pd.DataFrame, moves: str = "moves", blunders: str = "blunders", suffix: str = "") -> pd.DataFrame:
-    """Add the rate and its 95% interval to `df`."""
     m = df[moves].to_numpy(dtype=float)
     k = df[blunders].to_numpy(dtype=float)
     safe_m = np.where(m > 0, m, 1)

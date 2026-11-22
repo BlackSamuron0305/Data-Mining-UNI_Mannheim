@@ -22,8 +22,8 @@ import numpy as np
 import pandas as pd
 
 from src.config import CFG, DATA, ROOT, env, GAMES_SUB, LOGS_SUB, SELECTION_DIR, WORKERS, setup_log
-from src.lichess.pgn import capped_cp, iter_pgn, read_game, win_prob
-from src.shared.buckets import uniform
+from src.common.pgn import capped_cp, iter_pgn, read_game, win_prob
+from src.common.buckets import uniform
 from ..common.paths import STOCKFISH_DIR
 
 log = logging.getLogger("engine")

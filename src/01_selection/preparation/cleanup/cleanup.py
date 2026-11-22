@@ -1,10 +1,4 @@
-"""Read every game of the month once: keep the complete games, count moves and blunders per bucket and keep a
-random pool of games for the selections.
-
-Usage:  uv run python -m src.01_selection.preparation.cleanup.cleanup [--no-pool]
-
---no-pool only counts, for a month that no selection is drawn from. Writes to cache/cleanup/.
-"""
+# Clean the month and keep a pool of games for the selections
 import argparse
 import json
 import logging
@@ -21,8 +15,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from src.config import CFG, CLEANUP_DIR, MONTH, SEED, WORKERS, setup_log
-from src.lichess.storage import MonthFile
-from src.shared.buckets import (B_OFF, N_B, N_E, N_G, N_W, SPEEDS, WIN, elo_label, game_group, move_buckets,
+from ...download.storage import MonthFile
+from src.common.buckets import (B_OFF, N_B, N_E, N_G, N_W, SPEEDS, WIN, elo_label, game_group, move_buckets,
                                 uniform)
 from .filters import STEPS, complete_game, split_games
 
@@ -38,8 +32,8 @@ def clock_label(sec: int) -> str:
     return f"{sec // 60}:{sec % 60:02d}"
 
 
+# Speed, rating and time left of every bucket
 def bucket_table() -> pd.DataFrame:
-    """Speed, Elo of the mover and time left of every bucket of moves, in bucket order."""
     rows = []
     for s, sp in enumerate(SPEEDS):
         for e in range(N_E):
@@ -54,8 +48,8 @@ def bucket_table() -> pd.DataFrame:
     return pd.DataFrame(rows).set_index("bucket")
 
 
+# Speed and rating band of every group
 def group_table() -> pd.DataFrame:
-    """Speed and Elo of the mean rating of every group of games, in group order."""
     rows = []
     for s, sp in enumerate(SPEEDS):
         for e in range(N_E):
@@ -64,14 +58,13 @@ def group_table() -> pd.DataFrame:
 
 
 def cat(xs: list, dt=np.int64) -> np.ndarray:
-    """The arrays in `xs` joined into one of type `dt` (empty if there are none)."""
     if xs:
         return np.concatenate(xs).astype(dt)
     return np.empty(0, dtype=dt)
 
 
+# Count the complete games in a piece of text and keep the pool games
 def clean_text(text: str, rate: float) -> dict:
-    """Counts of the complete games in `text` and the pool games among them (a game is in the pool if u < rate)."""
     funnel = Counter()
     b_moves, b_blunders, b_games = [], [], []
     groups, g_moves, g_blunders = [], [], []
@@ -115,8 +108,8 @@ def clean_text(text: str, rate: float) -> dict:
     return out
 
 
+# Clean the games of one block of the file
 def clean_frame(frame: bytes, rate: float) -> dict:
-    """Clean the games that start in one zstd frame; the cut games at both ends are returned raw."""
     data = zstd.decompress(frame)
     first = data.find(b"\n[Event ") + 1
     last = data.rfind(b"\n[Event ") + 1
@@ -130,8 +123,8 @@ def clean_frame(frame: bytes, rate: float) -> dict:
 SUMS = ("moves", "blunders", "games", "group_games", "group_moves", "group_blunders")
 
 
+# Totals over all blocks
 class Total:
-    """Running sums over the frames; the pool games go to the parquet file as they come."""
 
     def __init__(self, path):
         self.funnel = Counter()
@@ -173,8 +166,8 @@ class Total:
             self.writer.close()
 
 
+# Clean the month (max_frames: only the first blocks, for a quick test)
 def run(pool: bool = True, max_frames: int | None = None) -> None:
-    """Clean the month; `max_frames` reads only the first frames, for a quick test."""
     rate = RATE if pool else 0.0
     CLEANUP_DIR.mkdir(parents=True, exist_ok=True)
     (CLEANUP_DIR / "cleanup.json").unlink(missing_ok=True)

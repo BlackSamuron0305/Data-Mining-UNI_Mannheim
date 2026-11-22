@@ -12,7 +12,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 
 from src.config import SEED
-from src.shared.metrics import scores
+from src.common.metrics import scores
 from ..common import FEATURE_SETS, TRAIN, Fitted, features, fit_and_save, numeric_prep, target
 
 METHOD = "neural_network"
@@ -65,7 +65,7 @@ def fit(fit_df, valid_df, cols, hidden="64-32", alpha=1e-4, learning_rate=1e-3, 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--features", choices=list(FEATURE_SETS), default="context")
+    ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--hidden", type=int, nargs="+", default=[64, 32], help="units per hidden layer")
     ap.add_argument("--alpha", type=float, default=DEFAULTS["alpha"], help="strength of the L2 penalty")
     ap.add_argument("--learning-rate", type=float, default=DEFAULTS["learning_rate"])

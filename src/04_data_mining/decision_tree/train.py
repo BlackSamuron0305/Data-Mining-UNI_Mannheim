@@ -13,8 +13,8 @@ import pandas as pd
 from sklearn.tree import DecisionTreeClassifier, export_text
 
 from src.config import SEED
-from src.shared.buckets import SHRINK
-from src.shared.metrics import scores
+from src.common.buckets import SHRINK
+from src.common.metrics import scores
 from ..common import (FEATURE_SETS, TRAIN, Fitted, columns, folds, load, predictions, run_dir, save_run,
                                  target, tree_features)
 
@@ -64,7 +64,7 @@ def rules(m, names):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--features", choices=list(FEATURE_SETS), default="context")
+    ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--depths", type=int, nargs="+", default=GRID["max_depth"])
     ap.add_argument("--min-samples-leaf", type=int, default=DEFAULTS["min_samples_leaf"])
     ap.add_argument("--rules-depth", type=int, default=4)

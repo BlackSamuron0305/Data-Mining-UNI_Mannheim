@@ -32,7 +32,7 @@ def fit(fit_df, valid_df, cols, learning_rate=0.1, max_leaf_nodes=63, min_sample
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--features", choices=list(FEATURE_SETS), default="context")
+    ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--learning-rate", type=float, default=DEFAULTS["learning_rate"])
     ap.add_argument("--max-leaf-nodes", type=int, default=DEFAULTS["max_leaf_nodes"])
     ap.add_argument("--min-samples-leaf", type=int, default=DEFAULTS["min_samples_leaf"])

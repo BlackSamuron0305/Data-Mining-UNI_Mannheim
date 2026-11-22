@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import BLUNDER_RATES_DIR
-from src.shared.buckets import shrunk
+from src.common.buckets import shrunk
 from ..common import load, save_run
 
 METHOD = "bucket_rate"

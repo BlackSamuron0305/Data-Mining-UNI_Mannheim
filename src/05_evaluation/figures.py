@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
 
-from src.shared.metrics import calibration, f32, ranking
+from src.common.metrics import calibration, f32, ranking
 from .groups import DIMENSIONS
 
 WIDTH = 14.5 / 2.54

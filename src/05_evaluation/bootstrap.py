@@ -10,7 +10,7 @@ from scipy import sparse
 from sklearn.metrics import average_precision_score
 
 from src.config import SEED
-from src.shared.metrics import f32, move_loss
+from src.common.metrics import f32, move_loss
 
 CHUNK = 100
 

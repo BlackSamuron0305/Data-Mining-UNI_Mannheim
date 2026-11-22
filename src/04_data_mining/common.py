@@ -3,6 +3,7 @@
 Every run writes data/runs/<method>/<name>/ with run.json, predictions_valid.parquet, predictions_test.parquet
 and, for methods with a model, model.joblib.
 """
+import importlib
 import json
 import time
 from datetime import datetime, timezone
@@ -11,33 +12,27 @@ from functools import cache
 import joblib
 import numpy as np
 import pandas as pd
-import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-from src.config import CFG, FEATURES_DIR, KEYS, RUNS_DIR, TARGET
-from src.shared.buckets import SPEEDS, uniform
+from src.config import CFG, FINAL_DIRS, KEYS, RUNS_DIR, TARGET
+from src.common.buckets import uniform
+
+category_coding = importlib.import_module("src.03_transformation.encoding.categories")
+boolean_coding = importlib.import_module("src.03_transformation.encoding.booleans")
+numeric_coding = importlib.import_module("src.03_transformation.encoding.numeric")
+tree_coding = importlib.import_module("src.03_transformation.encoding.trees")
+CATEGORICAL = category_coding.CATEGORICAL
+scaler = numeric_coding.scaler
 
 TRAIN = CFG["training"]
 TUNING = CFG["tuning"]
 
+# basic: three columns; context: every column of the final table without Stockfish; engine: of the one with it
+FEATURE_SETS = ["basic", "context", "engine"]
 BASIC = ["speed", "mover_elo", "clock"]
-CONTEXT = BASIC + [
-    "base_time", "increment", "white", "move_no", "hour", "event_type", "eco", "opp_elo", "elo_diff",
-    "opp_clock", "clock_rel", "clock_diff", "own_last_spent", "own_spent_recent", "opp_last_spent",
-    "eval_cp", "eval_wp",
-    "own_last_loss", "own_loss_mean", "own_loss_recent", "own_loss_max", "own_inaccuracies", "own_mistakes",
-    "own_blunders", "own_moves_since_error", "opp_last_loss", "opp_loss_recent", "opp_mistakes", "opp_blunders",
-    "legal_moves", "in_check", "material_own", "material_opp", "material_diff", "material_total"]
-ENGINE = (["sf_wp_best", "sf_n_scored", "sf_n_close"]
-          + [f"sf_gap_{k}" for k in range(2, 6)]
-          + [f"sf_worst_{k}" for k in range(1, 6)]
-          + [f"sf_share_{m}" for m in CFG["features"]["marks"]])
-FEATURE_SETS = {"basic": BASIC, "context": CONTEXT, "engine": CONTEXT + ENGINE}
+BOOKKEEPING = KEYS + ["bucket", "group", TARGET]
 
-CATEGORICAL = ["speed", "event_type", "eco"]
-CATEGORIES = {"speed": SPEEDS, "event_type": ["lobby", "arena", "swiss"], "eco": list("ABCDE")}
-
-# Feature groups for the ablation and the importance; "game" gets every context feature not named elsewhere.
+# Feature groups for the ablation and the importance; "game" gets every column not named elsewhere.
 GROUPS = {
     "game": [],
     "rating": ["mover_elo", "opp_elo", "elo_diff"],
@@ -47,28 +42,60 @@ GROUPS = {
                 "own_mistakes", "own_blunders", "own_moves_since_error", "opp_last_loss", "opp_loss_recent",
                 "opp_mistakes", "opp_blunders"],
     "board": ["legal_moves", "in_check", "material_own", "material_opp", "material_diff", "material_total"],
-    "engine": ENGINE,
+    "engine": [],
 }
-for _col in CONTEXT:
-    if not any(_col in group_cols for group_cols in GROUPS.values()):
-        GROUPS["game"].append(_col)
+
+
+def final_path(table, part):
+    path = FINAL_DIRS[table] / f"{part}.parquet"
+    if not path.exists():
+        share = importlib.import_module("src.common.server")
+        share.fetch("preprocessed", "src/02_preprocessing (README.md)")
+    return path
+
+
+@cache
+def table_columns(table):
+    """The feature columns of a final table, in its order."""
+    names = pq.read_schema(final_path(table, "train")).names
+    return [c for c in names if c not in BOOKKEEPING]
 
 
 def columns(cols):
     """The feature columns of a feature set (given by name) or of a list of columns."""
+    if cols == "basic":
+        return list(BASIC)
+    if cols == "context":
+        return table_columns("without_stockfish")
+    if cols == "engine":
+        return table_columns("with_stockfish")
     if isinstance(cols, str):
-        if cols not in FEATURE_SETS:
-            raise ValueError(f"unknown feature set {cols!r}, choose from {list(FEATURE_SETS)}")
-        return list(FEATURE_SETS[cols])
+        raise ValueError(f"unknown feature set {cols!r}, choose from {FEATURE_SETS}")
     return list(cols)
 
 
-def groups_of(cols):
-    """The feature groups restricted to the given columns (empty groups left out)."""
-    have = columns(cols)
-    out = {}
+def table_of(cols):
+    """The final table that holds these columns: with Stockfish if one of them is a Stockfish column."""
+    for c in columns(cols):
+        if c.startswith("sf_"):
+            return "with_stockfish"
+    return "without_stockfish"
+
+
+def group_of(col):
+    if col.startswith("sf_"):
+        return "engine"
     for group, group_cols in GROUPS.items():
-        kept = [c for c in group_cols if c in have]
+        if col in group_cols:
+            return group
+    return "game"
+
+
+def groups_of(cols):
+    """The feature groups of the given columns (empty groups left out)."""
+    out = {}
+    for group in GROUPS:
+        kept = [c for c in columns(cols) if group_of(c) == group]
         if kept:
             out[group] = kept
     return out
@@ -82,34 +109,13 @@ def is_valid_game(game_ids):
     return np.array(result, dtype=bool)
 
 
-@cache
-def categories(col):
-    """The categories of a categorical feature: CATEGORIES, else the sorted values of the training games."""
-    if col in CATEGORIES:
-        return list(CATEGORIES[col])
-    values = pq.read_table(FEATURES_DIR / "positions" / "train.parquet", columns=[col]).column(col)
-    return sorted(v for v in pc.unique(values).to_pylist() if v is not None)
-
-
-def load_engine(part, cols):
-    files = sorted((FEATURES_DIR / "engine" / part).glob("*.parquet"))
-    if not files:
-        raise FileNotFoundError(f"no engine features for {part}: run uv run python -m src.03_transformation.engine")
-    tables = [pd.read_parquet(f, columns=KEYS + cols) for f in files]
-    eng = pd.concat(tables, ignore_index=True)
-    return eng.astype({c: np.float32 for c in cols})
-
-
 def load(part, cols, max_games=None):
     """The moves of 'train' or 'test' with keys, bucket, target and features; train moves also get `fold`."""
-    path = FEATURES_DIR / "positions" / f"{part}.parquet"
-    if not path.exists():
-        raise FileNotFoundError(f"{path} is missing: run uv run python -m src.02_preprocessing.positions")
+    path = final_path(table_of(cols), part)
     wanted = columns(cols)
-    engine_cols = [c for c in wanted if c in ENGINE]
     read = KEYS + ["bucket", TARGET]
     for c in wanted:
-        if c not in ENGINE and c not in read:
+        if c not in read:
             read.append(c)
 
     games = None
@@ -118,28 +124,15 @@ def load(part, cols, max_games=None):
         ids = sorted(ids, key=lambda g: uniform(g, f"ie500-subset-{part}"))
         games = set(ids[:max_games])
 
-    eng = None
-    if engine_cols:
-        eng = load_engine(part, engine_cols)
-        analysed = set(eng["game_id"].unique())
-        if games is None:
-            games = analysed
-        else:
-            games = games & analysed
-
     filters = None
     if games is not None:
         filters = [("game_id", "in", sorted(games))]
     df = pq.read_table(path, columns=read, filters=filters).to_pandas()
-    if eng is not None:
-        df = df.merge(eng, on=KEYS, how="inner")
 
     for c in df.columns:
         if df[c].dtype == np.float64:
             df[c] = df[c].astype(np.float32)
-    for c in wanted:
-        if c in CATEGORICAL:
-            df[c] = pd.Categorical(df[c], categories=categories(c))
+    df = category_coding.add_categories(df, wanted)
 
     if part == "train":
         game_ids = df["game_id"].unique()
@@ -182,39 +175,18 @@ def split_games(df, frac, salt):
 
 
 def features(df, cols):
-    """The feature columns, booleans as numbers, categories kept as categories."""
-    x = df[columns(cols)].copy()
-    for c in x.columns:
-        if x[c].dtype == bool:
-            x[c] = x[c].astype(np.float32)
-    return x
+    """The feature columns, booleans as numbers (src/03_transformation/encoding/booleans.py)."""
+    return boolean_coding.features(df, columns(cols))
 
 
-def numeric_prep(cols, scaler=None):
-    """Median fill plus missing indicators, then scaling; categorical features one-hot encoded."""
-    from sklearn.compose import ColumnTransformer
-    from sklearn.impute import MissingIndicator, SimpleImputer
-    from sklearn.pipeline import make_pipeline
-    from sklearn.preprocessing import OneHotEncoder, StandardScaler
-
-    if scaler is None:
-        scaler = StandardScaler()
-    cat = [c for c in columns(cols) if c in CATEGORICAL]
-    num = [c for c in columns(cols) if c not in CATEGORICAL]
-    return ColumnTransformer([
-        ("num", make_pipeline(SimpleImputer(strategy="median"), scaler), num),
-        ("missing", MissingIndicator(features="missing-only", error_on_new=False), num),
-        ("cat", OneHotEncoder(handle_unknown="ignore"), cat)])
+def numeric_prep(cols, scale=None):
+    """Gaps filled, numbers scaled, categories one-hot (src/03_transformation/encoding/numeric.py)."""
+    return numeric_coding.numeric_prep(columns(cols), scale)
 
 
 def tree_features(df, cols):
-    """Features for scikit-learn trees: a category becomes its rank, missing values stay NaN."""
-    x = features(df, cols)
-    for c in x.columns:
-        if isinstance(x[c].dtype, pd.CategoricalDtype):
-            codes = x[c].cat.codes.to_numpy()
-            x[c] = np.where(codes < 0, np.nan, codes).astype(np.float32)
-    return x
+    """Categories as numbers for the trees (src/03_transformation/encoding/trees.py)."""
+    return tree_coding.tree_features(df, columns(cols))
 
 
 class Fitted:

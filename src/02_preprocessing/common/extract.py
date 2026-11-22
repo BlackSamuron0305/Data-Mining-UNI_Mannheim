@@ -24,8 +24,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from src.config import CFG, GAMES_SUB, LOGS_SUB, SELECTION_DIR, WORKERS, setup_log
-from src.lichess.pgn import CP_CAP, SPEED_RE, capped_cp, iter_pgn, read_game, time_control, win_prob
-from src.shared.buckets import SPEEDS, game_group, move_buckets
+from src.common.pgn import CP_CAP, SPEED_RE, capped_cp, iter_pgn, read_game, time_control, win_prob
+from src.common.buckets import SPEEDS, game_group, move_buckets
 from .paths import EXTRACTED_DIR
 
 log = logging.getLogger("extract")

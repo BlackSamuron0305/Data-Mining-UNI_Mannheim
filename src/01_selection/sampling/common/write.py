@@ -1,4 +1,4 @@
-"""Write a selection: its games, the PGN text, tables and a short summary."""
+# Write a selection to disk
 import json
 from compression import zstd
 from datetime import datetime, timezone
@@ -16,7 +16,6 @@ PARTS = ("train", "test")
 
 
 def folder(name: str):
-    """The folder of a selection, with its subfolders."""
     out = SELECTION_ROOT / name
     for sub in (GAMES_SUB, TABLES_SUB, LOGS_SUB):
         (out / sub).mkdir(parents=True, exist_ok=True)
@@ -24,7 +23,6 @@ def folder(name: str):
 
 
 def make_games(pool, train: np.ndarray, test: np.ndarray) -> pd.DataFrame:
-    """One row per selected game."""
     ids = np.concatenate([train, test])
     games = pool.games.loc[ids, ["game_id", "speed", "white_elo", "black_elo", "group", "plies"]]
     games = games.reset_index(drop=True)
@@ -33,8 +31,8 @@ def make_games(pool, train: np.ndarray, test: np.ndarray) -> pd.DataFrame:
     return games
 
 
+# Copy the PGN text of the selected games into train and test files
 def write_pgn(out, games: pd.DataFrame) -> None:
-    """Copy the PGN text of the selected games from the pool into train.pgn.zst and test.pgn.zst."""
     part_of = dict(zip(games["game_id"], games["split"]))
     found = {"train": 0, "test": 0}
     with zstd.open(out / GAMES_SUB / "train.pgn.zst", "wb", level=12) as train_file, \
@@ -53,8 +51,8 @@ def write_pgn(out, games: pd.DataFrame) -> None:
             raise ValueError(f"PGN text found for {found} games, expected {expected}")
 
 
+# Average gap between the blunder rates of a part and of the month
 def bucket_error(b: pd.DataFrame, p: str) -> float:
-    """Mean gap of the blunder rate per bucket, part against month, in points (weighted by the month's moves)."""
     b = b[b[f"moves_{p}"] > 0]
     return 100 * float((b["moves"] * (b[f"rate_{p}"] - b["rate"]).abs()).sum() / b["moves"].sum())
 
@@ -115,9 +113,9 @@ def summary(name: str, pool, g: pd.DataFrame, n: dict, moves: dict, rate: dict, 
     return "\n".join(lines) + "\n"
 
 
+# Write games, tables and summary into data/selection/<name>/
 def write_selection(name: str, pool, games: pd.DataFrame, part_ids: dict, balance: dict | None,
                     seconds: float) -> None:
-    """Write everything of a selection into data/selection/<name>/."""
     out = SELECTION_ROOT / name
     games.sort_values("game_id", ignore_index=True).to_csv(out / GAMES_SUB / "games.csv", index=False)
     write_pgn(out, games)

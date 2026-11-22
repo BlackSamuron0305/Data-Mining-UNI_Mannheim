@@ -41,7 +41,7 @@ def fit(fit_df, valid_df, cols, learning_rate=0.1, max_depth=6, min_child_weight
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--features", choices=list(FEATURE_SETS), default="context")
+    ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--learning-rate", type=float, default=DEFAULTS["learning_rate"])
     ap.add_argument("--max-depth", type=int, default=DEFAULTS["max_depth"])
     ap.add_argument("--min-child-weight", type=float, default=DEFAULTS["min_child_weight"])

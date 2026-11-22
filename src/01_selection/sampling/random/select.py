@@ -1,21 +1,15 @@
-"""Random selection: games drawn from the pool at random, every game with the same chance. It uses its own
-random numbers, so it is a draw of its own and not a copy of the stratified one.
-
-Usage:  uv run python -m src.01_selection.sampling.random.select
-
-Writes to data/selection/random/.
-"""
+# Random selection: every game has the same chance
 import logging
 import time
 
 import numpy as np
 
 from src.config import CFG, LOGS_SUB, setup_log
-from src.shared.buckets import uniform
-from ..shared.pool import Pool
-from ..shared.split import draw_random, test_part
-from ..shared.weights import same_chance
-from ..shared.write import folder, make_games, write_selection
+from src.common.buckets import uniform
+from ..common.pool import Pool
+from ..common.split import draw_random, test_part
+from ..common.weights import same_chance
+from ..common.write import folder, make_games, write_selection
 
 NAME = "random"
 N = CFG["selection"]["n_games"]

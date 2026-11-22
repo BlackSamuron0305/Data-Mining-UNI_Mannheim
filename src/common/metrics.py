@@ -1,8 +1,4 @@
-"""Scores of predicted blunder probabilities against what happened.
-
-Log loss, Brier score, ROC-AUC, PR-AUC and calibration error, plus the scores at a cut-off (best F1 on valid)
-and among the 5% of the moves with the highest prediction.
-"""
+# Scores of the predicted blunder probabilities, used by training and evaluation
 from __future__ import annotations
 
 import numpy as np
@@ -12,8 +8,8 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 EPS = 1e-7
 
 
+# Predicted against observed blunder rate, in bins
 def calibration(y: np.ndarray, p: np.ndarray, bins: int = 20) -> pd.DataFrame:
-    """Moves, mean prediction and observed rate in bins of equal size by prediction."""
     order = np.argsort(p, kind="stable")
     parts = np.array_split(order, bins)
     moves, mean_p, rate = [], [], []
@@ -24,8 +20,8 @@ def calibration(y: np.ndarray, p: np.ndarray, bins: int = 20) -> pd.DataFrame:
     return pd.DataFrame({"bin": np.arange(len(parts)), "moves": moves, "mean_p": mean_p, "rate": rate})
 
 
+# Log loss of every move
 def move_loss(y, p) -> np.ndarray:
-    """Log loss of every move."""
     y = np.asarray(y, dtype=float)
     p = np.clip(np.asarray(p, dtype=float), EPS, 1 - EPS)
     return -(y * np.log(p) + (1 - y) * np.log(1 - p))
@@ -52,13 +48,13 @@ def scores(y, p) -> dict:
     return out
 
 
+# Predictions as float32, so that a cut-off flags the same moves in every file
 def f32(p) -> np.ndarray:
-    """Predictions as float32, so that a cut-off flags the same moves in every file."""
     return np.asarray(p, dtype=np.float32)
 
 
+# Blunders and other moves flagged at every prediction value, highest first
 def ranking(y, p) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Blunders and other moves flagged at every distinct prediction, highest first, and that prediction."""
     y = np.asarray(y, dtype=float)
     p = f32(p)
     order = np.argsort(-p, kind="stable")
@@ -68,8 +64,8 @@ def ranking(y, p) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return np.cumsum(ys)[last], np.cumsum(1 - ys)[last], ps[last]
 
 
+# The cut-off with the highest F1
 def best_cutoff(y, p) -> float:
-    """The cut-off with the highest F1."""
     tp, fp, cut = ranking(y, p)
     f1 = 2 * tp / np.maximum(tp + fp + tp[-1], 1)
     return float(cut[np.argmax(f1)])
@@ -97,8 +93,8 @@ def top_name(k: float) -> str:
     return f"top{100 * k:g}"
 
 
+# Precision, recall and lift among the share k of the riskiest moves
 def top_share(y, p, k: float) -> dict:
-    """Precision, recall and lift among the share k of the moves with the highest prediction."""
     y = np.asarray(y, dtype=float)
     p = f32(p)
     m = max(1, int(round(k * len(p))))
@@ -114,8 +110,8 @@ def top_share(y, p, k: float) -> dict:
     return {f"precision_{t}": caught / m, f"recall_{t}": recall, f"lift_{t}": lift}
 
 
+# Scores at the cut-off and among the riskiest moves
 def decisions(y, p, cut: float, k: float) -> dict:
-    """The scores at the cut-off and among the top share k."""
     out = at_cutoff(y, p, cut)
     out.update(top_share(y, p, k))
     return out

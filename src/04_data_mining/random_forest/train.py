@@ -33,7 +33,7 @@ def fit(fit_df, valid_df, cols, n_estimators=200, min_samples_leaf=200, max_feat
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--features", choices=list(FEATURE_SETS), default="context")
+    ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--n-estimators", type=int, default=DEFAULTS["n_estimators"])
     ap.add_argument("--min-samples-leaf", type=int, default=DEFAULTS["min_samples_leaf"])
     ap.add_argument("--max-features", default=DEFAULTS["max_features"], help="sqrt, log2 or a share such as 0.5")

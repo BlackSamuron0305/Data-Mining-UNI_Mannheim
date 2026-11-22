@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import CFG
-from src.shared.buckets import SHRINK, elo_bin, shrunk
+from src.common.buckets import SHRINK, elo_bin, shrunk
 from ..common import TARGET, TRAIN, folds, load, save_run
 
 METHOD = "baseline"

@@ -16,8 +16,8 @@ from pathlib import Path
 import pandas as pd
 
 from src.config import ROOT, SEED
-from src.shared.buckets import uniform
-from src.shared.metrics import scores
+from src.common.buckets import uniform
+from src.common.metrics import scores
 from .common import (FEATURE_SETS, TRAIN, TUNING, cap_moves, columns, folds, load, predictions, run_dir,
                                  save_run, target)
 
@@ -165,7 +165,7 @@ def cv_check(method, tune_df, cols, table, objective, k, csv_path):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--method", choices=METHODS, required=True)
-    ap.add_argument("--features", choices=list(FEATURE_SETS), default="context")
+    ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--sampler", choices=["tpe", "grid"], default=TUNING.get("sampler", "tpe"))
     ap.add_argument("--trials", type=int, default=None, help="default: tuning.trials of the method (grid: all)")
     ap.add_argument("--objective", choices=OBJECTIVES, default=TUNING.get("objective", "log_loss"))
