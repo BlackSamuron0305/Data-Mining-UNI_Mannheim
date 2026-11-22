@@ -2,7 +2,7 @@
 removed for the same reasons as in without_stockfish/reduce.py.
 
 Usage:  uv run python -m src.02_preprocessing.with_stockfish.reduce   (after inspection.py)
-Output: data/preprocessing/with_stockfish/final/train.parquet, test.parquet, removed.csv
+Output: data/preprocessing/<selection>/with_stockfish/final/train.parquet, test.parquet, removed.csv
 """
 from ..common.paths import WITH_DIR
 from ..common.reduction import reduce_tables

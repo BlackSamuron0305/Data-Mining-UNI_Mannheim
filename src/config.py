@@ -14,9 +14,9 @@ SEED: int = CFG["seed"]
 WORKERS: int = int(os.environ.get("IE500_WORKERS") or min(CFG["workers"], os.cpu_count() or 1))
 MONTH: str = CFG["source"]["month"]
 
-# IE500_DATA and IE500_CACHE point data/ and cache/ elsewhere; IE500_SELECTION picks the selection that
-# the later steps use
-DATA = Path(os.environ.get("IE500_DATA") or ROOT / "data")
+# IE500_CACHE points cache/ elsewhere; IE500_SELECTION picks the selection that the later steps use, and
+# preprocessing, runs and validation each get a folder per selection
+DATA = ROOT / "data"
 CACHE = Path(os.environ.get("IE500_CACHE") or ROOT / "cache")
 CLEANUP_DIR = CACHE / "cleanup"
 BLUNDER_RATES_DIR = DATA / "blunder_rates"
@@ -25,11 +25,11 @@ SELECTION = os.environ.get("IE500_SELECTION") or "stratified"
 SELECTION_ROOT = DATA / "selection"
 SELECTION_DIR = SELECTION_ROOT / SELECTION
 COMPARISON_DIR = SELECTION_ROOT / "comparison"
-PREPROCESSING_DIR = DATA / "preprocessing"
+PREPROCESSING_DIR = DATA / "preprocessing" / SELECTION
 FINAL_DIRS = {"without_stockfish": PREPROCESSING_DIR / "without_stockfish" / "final",
               "with_stockfish": PREPROCESSING_DIR / "with_stockfish" / "final"}
-RUNS_DIR = DATA / "runs"
-VALIDATION_DIR = DATA / "validation"
+RUNS_DIR = DATA / "runs" / SELECTION
+VALIDATION_DIR = DATA / "validation" / SELECTION
 GAMES_SUB = "games"
 TABLES_SUB = "tables"
 LOGS_SUB = "logs"

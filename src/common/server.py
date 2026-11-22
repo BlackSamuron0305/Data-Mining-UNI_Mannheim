@@ -14,7 +14,7 @@ from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from src.config import CACHE, DATA, FINAL_DIRS, MONTH, ROOT, SELECTION, SELECTIONS, SOURCE, s3_settings
+from src.config import CACHE, DATA, FINAL_DIRS, MONTH, PREPROCESSING_DIR, SELECTION, SELECTIONS, SOURCE, s3_settings
 
 PROJECT = "Data-Mining-Project"
 MONTH_FOLDERS = {"2026-09": "September 2026", "2026-08": "August 2026"}
@@ -23,9 +23,9 @@ PARTS = ["train", "test"]
 FINAL_FILES = ["train.parquet", "test.parquet", "removed.csv"]
 KEYS = ["game_id", "ply"]
 CLEANUP_DIR = CACHE / "cleanup"
-STOCKFISH_DIR = DATA / "preprocessing" / "with_stockfish" / "stockfish"
+STOCKFISH_DIR = PREPROCESSING_DIR / "with_stockfish" / "stockfish"
 # run A and run B share most games, so the server keeps one Stockfish file per part
-ENGINE_DIRS = [ROOT / d / "preprocessing" / "with_stockfish" / "stockfish" for d in ("data", "data_balanced")]
+ENGINE_DIRS = [DATA / "preprocessing" / s / "with_stockfish" / "stockfish" for s in ("stratified", "balanced")]
 TRANSFER = TransferConfig(multipart_threshold=64 << 20, multipart_chunksize=64 << 20, max_concurrency=16)
 
 
@@ -65,7 +65,7 @@ def local_path(name: str) -> Path | None:
     if package == "preprocessed":
         parts = rest.split("/")
         if len(parts) == 3 and parts[0] in SELECTIONS and parts[1] in FINAL_DIRS and parts[2] in FINAL_FILES:
-            return FINAL_DIRS[parts[1]] / parts[2]
+            return DATA / "preprocessing" / parts[0] / parts[1] / "final" / parts[2]
         return None
     if not rest or Path(rest).name != rest or Path(rest).is_absolute():
         return None

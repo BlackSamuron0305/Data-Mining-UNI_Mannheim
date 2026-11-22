@@ -1,7 +1,7 @@
 """Add the Stockfish columns to the moves without false predictors.
 
 Usage:  uv run python -m src.02_preprocessing.with_stockfish.preprocess   (after without_stockfish/preprocess.py)
-Output: data/preprocessing/with_stockfish/clean/train.parquet, test.parquet
+Output: data/preprocessing/<selection>/with_stockfish/clean/train.parquet, test.parquet
 
 If the Stockfish files are not on this computer, they are downloaded from the team's server (needs .env),
 unless IE500_SOURCE=scratch.

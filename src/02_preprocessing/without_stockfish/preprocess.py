@@ -1,7 +1,7 @@
 """Remove the false predictors from the extracted moves.
 
 Usage:  uv run python -m src.02_preprocessing.without_stockfish.preprocess   (after common.extract)
-Output: data/preprocessing/without_stockfish/clean/train.parquet, test.parquet, false_predictors.csv
+Output: data/preprocessing/<selection>/without_stockfish/clean/train.parquet, test.parquet, false_predictors.csv
 """
 import logging
 

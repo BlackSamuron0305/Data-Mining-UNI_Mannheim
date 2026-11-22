@@ -1,6 +1,6 @@
 """Code shared by all training methods: feature sets, loading the moves, the fitted model and saving a run.
 
-Every run writes data/runs/<method>/<name>/ with run.json, predictions_valid.parquet, predictions_test.parquet
+Every run writes data/runs/<selection>/<method>/<name>/ with run.json, predictions_valid.parquet, predictions_test.parquet
 and, for methods with a model, model.joblib.
 """
 import importlib

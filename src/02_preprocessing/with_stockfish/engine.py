@@ -2,8 +2,8 @@
 on 16 cores; the default is to download our results instead (README.md).
 
 Usage:  uv run python -m src.02_preprocessing.with_stockfish.engine [train|test ...]
-Output: data/preprocessing/with_stockfish/stockfish/<part>/NNNNN.parquet (one file per batch of games), engine.json
-IE500_SHARD="i/n" does only every n-th batch file; IE500_ENGINE_REUSE=<data folder> reuses that folder's files.
+Output: data/preprocessing/<selection>/with_stockfish/stockfish/<part>/NNNNN.parquet (one file per batch of games), engine.json
+IE500_SHARD="i/n" does only every n-th batch file; IE500_ENGINE_REUSE=<selection> reuses that selection's files.
 """
 from __future__ import annotations
 
@@ -21,10 +21,10 @@ import chess.engine
 import numpy as np
 import pandas as pd
 
-from src.config import CFG, DATA, ROOT, env, GAMES_SUB, LOGS_SUB, SELECTION_DIR, WORKERS, setup_log
+from src.config import CFG, DATA, env, GAMES_SUB, LOGS_SUB, SELECTION_DIR, WORKERS, setup_log
 from src.common.pgn import capped_cp, iter_pgn, read_game, win_prob
 from src.common.buckets import uniform
-from ..common.paths import STOCKFISH_DIR
+from ..common.paths import PRE_DIR, STOCKFISH_DIR
 
 log = logging.getLogger("engine")
 PARTS = ("train", "test")
@@ -192,15 +192,12 @@ def jobs(part: str, out_dir: Path, keep: set[str]):
 
 
 def reuse(part: str, out_dir: Path, name: str) -> set[str]:
-    """IE500_ENGINE_REUSE=<data folder>: copy in that folder's engine files of the part (same engine and
+    """IE500_ENGINE_REUSE=<selection>: copy in that selection's engine files of the part (same engine and
     settings) as reuse_NNNNN.parquet and return their games, which are then not analysed again."""
     src = os.environ.get("IE500_ENGINE_REUSE")
     if not src:
         return set()
-    src_root = Path(src)
-    if not src_root.is_absolute():
-        src_root = ROOT / src
-    src_dir = src_root / STOCKFISH_DIR.relative_to(DATA) / part
+    src_dir = DATA / "preprocessing" / src / STOCKFISH_DIR.relative_to(PRE_DIR) / part
     if src_dir.resolve() == out_dir.resolve():
         return set()
     meta = json.loads((src_dir / "engine.json").read_text(encoding="utf-8"))

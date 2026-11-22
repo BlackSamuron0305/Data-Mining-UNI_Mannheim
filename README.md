@@ -58,10 +58,7 @@ Whatever a step needs and does not find, it downloads from the server, or, with 
 
     uv run python -m src.01_selection.preparation.blunder_rates.rates     # downloads the cleanup
     uv run python -m src.01_selection.sampling.stratified.select
-    export IE500_DATA=data_balanced IE500_SELECTION=balanced              # run B (balancing experiment)
-    uv run python -m src.01_selection.preparation.blunder_rates.rates
-    uv run python -m src.01_selection.sampling.stratified_balanced.select
-    unset IE500_DATA IE500_SELECTION
+    uv run python -m src.01_selection.sampling.stratified_balanced.select # run B (balancing experiment)
     bash run_models.sh                                                    # downloads the final tables, trains, validates
 
 ### From scratch
@@ -79,16 +76,15 @@ Whatever a step needs and does not find, it downloads from the server, or, with 
     uv run python -m src.02_preprocessing.with_stockfish.preprocess
     uv run python -m src.02_preprocessing.with_stockfish.inspection
     uv run python -m src.02_preprocessing.with_stockfish.reduce
-    export IE500_DATA=data_balanced IE500_SELECTION=balanced              # run B (balancing experiment)
-    uv run python -m src.01_selection.preparation.blunder_rates.rates
+    export IE500_SELECTION=balanced                                       # run B (balancing experiment)
     uv run python -m src.01_selection.sampling.stratified_balanced.select
     uv run python -m src.02_preprocessing.common.extract
-    IE500_ENGINE_REUSE=data uv run python -m src.02_preprocessing.with_stockfish.engine   # only run B's new games
+    IE500_ENGINE_REUSE=stratified uv run python -m src.02_preprocessing.with_stockfish.engine   # only run B's new games
     uv run python -m src.02_preprocessing.without_stockfish.preprocess
     uv run python -m src.02_preprocessing.without_stockfish.reduce
     uv run python -m src.02_preprocessing.with_stockfish.preprocess
     uv run python -m src.02_preprocessing.with_stockfish.reduce
-    unset IE500_DATA IE500_SELECTION
+    unset IE500_SELECTION
     bash run_models.sh
 
 Run B uses the column decisions of run A: its `reduce.py` removes the same columns, no new inspection.
@@ -110,7 +106,7 @@ Every selection writes its games (PGN and `games.csv` with each game's chance to
 
 ## Preprocessing
 
-    uv run python -m src.02_preprocessing.common.extract                   # one row per move with every column, incl. the false predictors, into data/preprocessing/extracted/
+    uv run python -m src.02_preprocessing.common.extract                   # one row per move with every column, incl. the false predictors, into data/preprocessing/<selection>/extracted/
     uv run python -m src.02_preprocessing.common.leakage_check             # the kept columns are known before the move; the false predictors are not
     uv run python -m src.02_preprocessing.without_stockfish.preprocess     # removes the 13 false predictors
     uv run python -m src.02_preprocessing.without_stockfish.inspection     # missing values, near-constant columns, correlations (training games only)
@@ -119,7 +115,7 @@ Every selection writes its games (PGN and `games.csv` with each game's chance to
     uv run python -m src.02_preprocessing.with_stockfish.inspection
     uv run python -m src.02_preprocessing.with_stockfish.reduce
 
-Results: `data/preprocessing/<without|with>_stockfish/final/` (38 → 30 columns without Stockfish, 53 → 37 with). Every removed column and its reason (domain knowledge or inspection) is in `removed.csv` and in the `REMOVE` list of `reduce.py`. To run Stockfish yourself instead of downloading it: `src/02_preprocessing/with_stockfish/README.md`.
+Results: `data/preprocessing/<selection>/<without|with>_stockfish/final/` (38 → 30 columns without Stockfish, 53 → 37 with). Every removed column and its reason (domain knowledge or inspection) is in `removed.csv` and in the `REMOVE` list of `reduce.py`. To run Stockfish yourself instead of downloading it: `src/02_preprocessing/with_stockfish/README.md`.
 
 Every feature is known before the move is played: the position, the clocks, the ratings, the earlier moves, the hour the game started, lobby/arena/swiss, and the opening letter from ply 12 on. Stockfish looks at the moves the player can choose from, never at the move that was played, in two passes: a deep search of the best 5 moves and a quick shallow look at every legal move for the worst 5 and the share of losing moves (38 ms per position on one core: about 15 hours for all games on a computer with 16 cores, or use the cluster, see below). A stopped engine run continues where it was.
 
@@ -127,7 +123,7 @@ The leakage check cuts sample games at a random move, scrambles everything Liche
 
 ## Training
 
-Every method has its own folder in `src/04_data_mining/`, every run writes `data/runs/<method>/<name>/` (predictions of the held-out training games and of the test games, settings, model). Training reads the final tables of the preprocessing (downloaded if missing, see above). Feature sets: `basic` (speed, Elo, clock), `context` (every column of `data/preprocessing/without_stockfish/final/`), `engine` (every column of `data/preprocessing/with_stockfish/final/`). The columns come from the tables, so a column removed in `reduce.py` is gone from training too. Encoding: `src/03_transformation/`. `bash run_models.sh` runs every training and validation of the paper.
+Every method has its own folder in `src/04_data_mining/`, every run writes `data/runs/<selection>/<method>/<name>/` (predictions of the held-out training games and of the test games, settings, model). Training reads the final tables of the preprocessing (downloaded if missing, see above). Feature sets: `basic` (speed, Elo, clock), `context` (every column of `data/preprocessing/without_stockfish/final/`), `engine` (every column of `data/preprocessing/with_stockfish/final/`). The columns come from the tables, so a column removed in `reduce.py` is gone from training too. Encoding: `src/03_transformation/`. `bash run_models.sh` runs every training and validation of the paper.
 
     uv run python -m src.04_data_mining.bucket_rate.train --source month               # baseline: the blunder probability of the move's bucket in the month
     uv run python -m src.04_data_mining.bucket_rate.train --source train               # the same from the training games only
@@ -157,38 +153,37 @@ The tuner fits every trial on a random subset of the fitting games (`tuning.tune
 
 ## Validation
 
-    uv run python -m src.05_evaluation.validate                             # scores every run in data/runs/ on the same moves, into data/validation/
+    uv run python -m src.05_evaluation.validate                             # scores every run in data/runs/<selection>/ on the same moves, into data/validation/<selection>/
     uv run python -m src.05_evaluation.validate --best gradient_boosting/context --bootstrap 200   # another run for the error analysis, fewer resamples
 
 Choose between runs on the held-out training games (valid), report the test games. Runs are compared on the moves that all of them predicted, against the baseline `bucket_rate/month`. Besides the probability scores (log loss, Brier, ROC-AUC, PR-AUC, calibration) every run gets a cut-off for flagging a move, chosen on its own held-out games and only then used on the test games, with precision, recall, F1, MCC and balanced accuracy there, and the blunders among the 5% riskiest moves. The test scores come with 95% intervals that resample whole games. `figures/` draws the baseline and the best run of every method (ROC, precision-recall, calibration, gains and lift, scores by speed, Elo, move number, time left and position); `errors/` shows where the best run misses blunders and raises false alarms. Settings: `evaluation:` in `config.yaml`; start with `summary.md`.
 
 ## Balancing experiment
 
-Does balancing the training games help the models? Run A is the normal pipeline above with the stratified selection in `data/`. Run B uses the balanced selection and goes to its own folder `data_balanced/`. The balanced selection keeps the test games of the stratified one, so both runs are scored on the same test games. The cleanup in `cache/` is shared; do not rerun it.
+Does balancing the training games help the models? Run A is the normal pipeline above with the stratified selection. Run B uses the balanced selection; its tables and runs go next to run A's, in `data/preprocessing/balanced/` and `data/runs/balanced/`. The balanced selection keeps the test games of the stratified one, so both runs are scored on the same test games. The cleanup in `cache/` is shared; do not rerun it.
 
-In Git Bash (in PowerShell set `$env:IE500_DATA = "data_balanced"; $env:IE500_SELECTION = "balanced"` once instead):
+In Git Bash (in PowerShell set `$env:IE500_SELECTION = "balanced"` once instead):
 
-    export IE500_DATA=data_balanced IE500_SELECTION=balanced
-    uv run python -m src.01_selection.preparation.blunder_rates.rates
+    export IE500_SELECTION=balanced
     uv run python -m src.01_selection.sampling.stratified_balanced.select
     uv run python -m src.02_preprocessing.common.extract
-    IE500_ENGINE_REUSE=data uv run python -m src.02_preprocessing.with_stockfish.engine   # after run A's engine: only run B's new games
+    IE500_ENGINE_REUSE=stratified uv run python -m src.02_preprocessing.with_stockfish.engine   # after run A's engine: only run B's new games
     uv run python -m src.02_preprocessing.without_stockfish.preprocess
     uv run python -m src.02_preprocessing.without_stockfish.reduce            # the same columns as run A
     uv run python -m src.02_preprocessing.with_stockfish.preprocess
     uv run python -m src.02_preprocessing.with_stockfish.reduce
     uv run python -m src.04_data_mining.bucket_rate.train --source month
-    uv run python -m src.04_data_mining.gradient_boosting.train --features context    # and every other run of run A, same settings
-    unset IE500_DATA IE500_SELECTION
+    uv run python -m src.04_data_mining.tune --method gradient_boosting --features context --params-from stratified --cv 0   # and every other run of run A, same settings
+    unset IE500_SELECTION
 
-Then, back in `data/`:
+Then:
 
-    uv run python -m src.05_evaluation.validate --with balanced=data_balanced     # into data/validation/with_balanced/
+    uv run python -m src.05_evaluation.validate --with balanced     # into data/validation/stratified/with_balanced/
 
-The runs of run B appear as `balanced:<method>/<name>` next to those of run A, scored on the shared test games only (the held-out games differ between the two). The validation stops if the test games of the two folders differ.
+The runs of run B appear as `balanced:<method>/<name>` next to those of run A, scored on the shared test games only (the held-out games differ between the two). The validation stops if the test games of the two selections differ.
 
 ## Cluster
 
 Stockfish on every move takes about 250 core-hours. We ran it on a 16-core desktop (about 15 hours). We also prepared the same jobs for bwUniCluster 3.0 (selection, run B and Stockfish as an array of 4 nodes that share the batches through `IE500_SHARD`). The job scripts are not part of the repository, because they hold the paths of a personal workspace.
 
-Run B shares all test games and 93% of the training games with run A, so its engine run takes over run A's files (`IE500_ENGINE_REUSE=data`) and analyses only the about 18,000 new training games. Stockfish on the cluster is version 19 built from source (the release binary needs a newer system library than the cluster has).
+Run B shares all test games and 93% of the training games with run A, so its engine run takes over run A's files (`IE500_ENGINE_REUSE=stratified`) and analyses only the about 18,000 new training games. Stockfish on the cluster is version 19 built from source (the release binary needs a newer system library than the cluster has).
