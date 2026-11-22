@@ -1,0 +1,462 @@
+% IE500 Data Mining - project presentation (10 minutes + 5 minutes discussion), uploaded as PDF.
+% The course gives no slide template (the DWS layout is required for the proposal and the paper);
+% the style below is the one of the earlier slides.
+% Red boxes and ?? mark results that are not in yet (data/validation/ after the runs); none may be left.
+\documentclass[aspectratio=169,11pt]{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc,shapes.misc,decorations.pathreplacing}
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily\scriptsize, columns=fullflexible, keepspaces=true,
+  backgroundcolor=\color{black!6}, frame=single, rulecolor=\color{black!30}, framesep=3pt,
+  moredelim={[is][\color{red!70!black}\bfseries]{@}{@}}}
+
+% team number, names and title (shared with the proposal and the final paper)
+\input{../team}
+
+\usetheme{default}
+\usefonttheme{professionalfonts}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}{\hfill\scriptsize\insertframenumber\,/\,\inserttotalframenumber\hspace{1em}\vspace{.6em}}
+\definecolor{accent}{HTML}{1C5CAB}
+\definecolor{good}{HTML}{2E7D32}
+\definecolor{bad}{HTML}{C62828}
+\definecolor{muted}{HTML}{8A8A8A}
+\setbeamercolor{frametitle}{fg=accent}
+\setbeamercolor{title}{fg=accent}
+\setbeamercolor{structure}{fg=accent}
+\setbeamerfont{frametitle}{series=\bfseries}
+\setbeamertemplate{itemize items}[circle]
+\newcommand{\hl}[1]{\textcolor{accent}{\textbf{#1}}}
+\newcommand{\tbd}{\textcolor{red}{\textbf{??}}}
+% a result that is not in yet: a red box of the size the figure or table will have
+\newcommand{\open}[3]{\fbox{\parbox[c][#2][c]{#1}{\centering\small\color{red}#3}}}
+\tikzset{box/.style={draw=accent, rounded corners=3pt, fill=accent!6, align=center, font=\footnotesize,
+  minimum height=1.05cm, text width=2.1cm}, arr/.style={-{Stealth[length=2mm]}, accent, thick}}
+
+\title{\ProjectTitle}
+\subtitle{\ProjectSubtitle}
+\author{Team \TeamNumber\\[.4em] \small \TeamMembers}
+\institute{IE500 Data Mining\\ Data and Web Science Group, University of Mannheim}
+\date{}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 1 problem
+\begin{frame}[fragile]{One move decides the game}
+  \begin{columns}[c]
+    \begin{column}{.33\textwidth}
+      \includegraphics[width=\linewidth]{../proposal/blunder_example}
+    \end{column}
+    \begin{column}{.64\textwidth}
+\begin{lstlisting}
+[WhiteElo "1413"] [BlackElo "1452"] [TimeControl "600+0"]
+28. cxd5   { [%eval -0.36] [%clk 0:00:40] }
+28... cxd5 { [%eval -0.32] [%clk 0:06:22] }
+29. @Qc3??@  { [%eval -9.42] [%clk 0:00:18] }
+29... Qxc3 { [%eval -9.41] [%clk 0:06:18] } 0-1
+\end{lstlisting}
+      \vspace{.6em}
+      \small
+      \begin{itemize}
+        \item \hl{Blunder} (``??''): a move that costs $\geq$ 15 points of winning chances
+        \item 40\,s left against 6:22, the queen goes to an undefended square: 47\,\% $\to$ 3\,\%
+        \item Engines judge \emph{positions}, not \emph{humans under pressure}
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{.8em}
+  \begin{center}
+    \fcolorbox{accent}{accent!6}{\parbox{.9\textwidth}{\centering
+      Can we predict \textbf{before the move} whether a player is about to blunder?}}
+  \end{center}
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 2 data
+\begin{frame}{Data: one month of Lichess}
+  \begin{columns}[t]
+    \begin{column}{.5\textwidth}
+      \begin{itemize}
+        \item Lichess Open Database, \hl{September 2026}
+        \item \textbf{89.6 million} games, 29.2\,GB compressed
+        \item Every move: clock; analysed games also the engine evaluation and the marks ?!, ?, ??
+        \item \hl{Complete cases}: bullet to classical, rated humans, $\geq$ 20 plies, clock + evaluation on
+          every move: \textbf{8.7 million} games, 580 million moves
+        \item Target: ``??'' on the move \\ $\approx$ \textbf{1 move in 20} is a blunder (5.5\,\%)
+      \end{itemize}
+    \end{column}
+    \begin{column}{.47\textwidth}
+      \small Blunder rate in a first sample (945k moves)\\[.4em]
+      \begin{tikzpicture}[x=1cm, y=.105cm]
+        \foreach \y/\lab/\v/\c in {0/{opponent just erred}/27.7/bad, 1/{opponent did not}/4.3/muted,
+                                    2/{$<$5\,\% of time left}/8.2/bad, 3/{$>$50\,\% of time left}/4.8/muted,
+                                    4/{rating $<$ 1200}/7.8/bad, 5/{rating $\geq$ 2000}/3.9/muted} {
+          \node[anchor=east, font=\scriptsize] at (0,-\y*6) {\lab};
+          \fill[\c!70] (0.05,-\y*6-2.2) rectangle ({0.05+\v*0.1},-\y*6+2.2);
+          \node[anchor=west, font=\scriptsize] at ({0.1+\v*0.1},-\y*6) {\v\,\%};
+        }
+      \end{tikzpicture}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 3 pipeline
+\begin{frame}{The pipeline}
+  \centering
+  \begin{tikzpicture}[node distance=.4cm, box/.append style={text width=1.75cm, minimum height=1.5cm}]
+    \node[box] (census) {\textbf{Census}\\ every game of the month};
+    \node[box, right=of census] (select) {\textbf{Selection}\\ 350k games, 80/20 by game};
+    \node[box, right=of select] (feat) {\textbf{Features}\\ 38 per move, before it};
+    \node[box, right=of feat] (sf) {\textbf{Stockfish}\\ top 5 + worst 5, every move};
+    \node[box, right=of sf] (ml) {\textbf{8 learners}\\ with / without Stockfish};
+    \node[box, right=of ml] (eval) {\textbf{Evaluation}\\ same test games};
+    \foreach \a/\b in {census/select, select/feat, feat/sf, sf/ml, ml/eval} \draw[arr] (\a) -- (\b);
+    \node[box, below=.9cm of select, draw=good, fill=good!5] (ab) {\textbf{Run A / B}\\ random vs.\ balanced training};
+    \node[box, below=.9cm of sf, draw=bad, fill=bad!5] (leak) {\textbf{Leakage check}\\ cut at a random move};
+    \node[box, below=.9cm of ml] (tune) {\textbf{Tuning}\\ Optuna, validation games};
+    \draw[arr, good] (select) -- (ab); \draw[arr, bad] (sf) -- (leak); \draw[arr, <->] (ml) -- (tune);
+  \end{tikzpicture}
+  \vspace{.5em}
+
+  \small Stockfish on 24.4 million positions $\approx$ 250 core-hours: about 15 hours on one 16-core desktop
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 4 selection
+\begin{frame}{Which games? Three designs}
+  \small
+  \begin{columns}[t]
+    \begin{column}{.32\textwidth}
+      \hl{Fully random}\\[.3em]
+      \begin{tikzpicture}[scale=.32]
+        \pgfmathsetseed{7}\foreach \i in {0,...,27} {\pgfmathsetmacro{\h}{0.6+1.6*rnd} \fill[muted!60] (\i*0.32,0) rectangle +(0.24,\h);}
+      \end{tikzpicture}\\[.3em]
+      every complete game has the same chance\\[.2em]
+      \textcolor{bad}{rare groups (e.g.\ classical, 2000+) vary by chance}\\[.2em]
+      $\Rightarrow$ yardstick only
+    \end{column}
+    \begin{column}{.32\textwidth}
+      \hl{Stratified random} \textbf{(run A)}\\[.3em]
+      \begin{tikzpicture}[scale=.32]
+        \foreach \i in {0,...,27} {\pgfmathsetmacro{\h}{0.6+1.6*mod(\i*7,11)/11} \fill[accent!70] (\i*0.32,0) rectangle +(0.24,\h);}
+      \end{tikzpicture}\\[.3em]
+      28 groups (speed $\times$ rating), each \textbf{exactly} its share of the month; random inside\\[.2em]
+      \textcolor{good}{only chance inside the groups}
+    \end{column}
+    \begin{column}{.32\textwidth}
+      \hl{Stratified + balanced} \textbf{(run B)}\\[.3em]
+      \begin{tikzpicture}[scale=.32]
+        \foreach \i in {0,...,27} {\pgfmathsetmacro{\h}{0.6+1.6*mod(\i*7,11)/11} \fill[good!70] (\i*0.32,0) rectangle +(0.24,\h);}
+        \draw[bad, thick, dashed] (0,1.3) -- (9,1.3);
+      \end{tikzpicture}\\[.3em]
+      swap games until all \textbf{756 buckets} have the month's blunder rate\\[.2em]
+      \textcolor{bad}{chooses games by their label}
+    \end{column}
+  \end{columns}
+  \vspace{.9em}
+  \begin{columns}[t]
+    \begin{column}{.48\textwidth}
+      \textcolor{good}{\textbf{For balancing:}} the models see the true blunder rate in every combination of
+      speed, rating and time left
+    \end{column}
+    \begin{column}{.48\textwidth}
+      \textcolor{bad}{\textbf{Against:}} games \emph{without} blunders are calmer games; the 756 rates are
+      fixed, everything else may bend
+    \end{column}
+  \end{columns}
+  \vspace{.6em}
+  \centering
+  \fcolorbox{accent}{accent!6}{Settled by experiment: balance \textbf{training} games only, score A and B on the \textbf{same test games}}
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 5 features
+\begin{frame}{Features: what we keep, what we remove}
+  \centering
+  \begin{tikzpicture}[
+      col/.style={draw, rounded corners=3pt, align=left, font=\scriptsize, text width=4.15cm, inner sep=5pt,
+        minimum height=4.1cm, anchor=north},
+      head/.style={font=\footnotesize\bfseries, anchor=south, inner sep=3pt}]
+    \node[col, draw=muted, fill=black!3] (raw) at (0,0) {%
+      \textbf{per game}\\
+      Event, TimeControl, UTCTime, WhiteElo, BlackElo, ECO, Opening, Result, RatingDiff, Termination, player
+      names\\[.5em]
+      \textbf{per move}\\
+      the move, the clock after it, the evaluation after it, the mark ?!\,/\,?\,/\,??};
+    \node[head, muted] at (raw.north) {Lichess gives us};
+
+    \node[col, draw=bad, fill=bad!6] (out) at (5.05,0) {%
+      \textbf{after the move:} mark (?? is the target), loss, evaluation and clock after it, time spent on
+      it\\[.4em]
+      \textbf{after the game:} result, rating change, termination, game length\\[.4em]
+      \textbf{before move 12:} opening name, ECO letter\\[.4em]
+      \textbf{who played:} player names};
+    \node[head, bad] at (out.north) {removed: 13 false predictors};
+
+    \node[col, draw=good, fill=good!6] (keep) at (10.1,0) {%
+      \textbf{game} 8 \textcolor{muted}{speed, time control, \dots}\\[.15em]
+      \textbf{rating} 3 \textcolor{muted}{mover, opponent, diff.}\\[.15em]
+      \textbf{clock} 7 \textcolor{muted}{both clocks, time spent}\\[.15em]
+      \textbf{evaluation} 2 \textcolor{muted}{win prob. before}\\[.15em]
+      \textbf{history} 12 \textcolor{muted}{earlier errors}\\[.15em]
+      \textbf{board} 6 \textcolor{muted}{legal moves, material}\\[.6em]
+      \textbf{= 38 per move}\\[.3em]
+      \textbf{+ Stockfish} 15 \textcolor{muted}{how hard is it?}\\[.15em]
+      \textbf{= 53 per move}};
+    \node[head, good!70!black] at (keep.north) {kept};
+
+    \draw[arr, muted] ([yshift=-2cm]raw.north east) -- ([yshift=-2cm]out.north west);
+    \draw[arr, muted] ([yshift=-2cm]out.north east) -- ([yshift=-2cm]keep.north west);
+  \end{tikzpicture}
+  \vspace{.6em}
+
+  \footnotesize
+  \textcolor{bad}{\textbf{Leakage check}}: cut games at a random move N and scramble everything from N on
+  $\Rightarrow$ \textbf{0} kept columns change; the false predictors do change (header ones: removed by reasoning)
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 5b reduction
+\begin{frame}{Feature reduction: domain knowledge and inspection}
+  \begin{columns}[c]
+    \begin{column}{.43\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{figures/correlation_heatmap}\\
+      \tiny\textcolor{muted}{Spearman correlation on 1 million training moves (test games untouched);
+      removed columns in orange}
+    \end{column}
+    \begin{column}{.55\textwidth}
+      \scriptsize
+      \renewcommand{\arraystretch}{1.15}
+      \begin{tabular}{@{}>{\raggedright}p{1.35cm}>{\raggedright}p{2.85cm}>{\raggedright\arraybackslash}p{2.35cm}@{}}
+        \toprule
+        \textbf{basis} & \textbf{removed} & \textbf{why} \\
+        \midrule
+        domain & eval\_cp & = eval\_wp, other units \\
+        knowledge & hour & UTC, not local time \\
+                  & sf\_best\_move & text, not a number \\
+        \midrule
+        redundant & material\_own/opp, opp\_elo, opp\_clock & follow from kept columns \\
+        $|\rho| \geq 0.9$ & sf\_n\_scored, sf\_wp\_best & = legal moves, $\approx$ eval\_wp \\
+                          & sf\_gap\_3--4, sf\_worst\_2--4, sf\_share\_mistake & $\rho$ 0.90--0.97 with neighbours \\
+        \midrule
+        no signal & white, event\_type & same blunder rate \\
+        \bottomrule
+      \end{tabular}\\[.7em]
+      \small
+      columns: \hl{38 $\to$ 30} without, \hl{53 $\to$ 37} with Stockfish
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 6 stockfish
+\begin{frame}{Stockfish: how hard is the choice?}
+  \begin{columns}[c]
+    \begin{column}{.52\textwidth}
+      \centering
+      \begin{tikzpicture}[x=.21cm, y=2.4cm]
+        % illustration: win probability after each legal move of one position, best first
+        \foreach \v [count=\i] in {.62,.60,.58,.55,.53,.52,.50,.49,.47,.46,.44,.43,.41,.38,.36,.33,.30,.27,.22,.18,.12,.08,.05,.03} {
+          \pgfmathsetmacro{\c}{\i<=5 ? 1 : (\i>=20 ? 2 : 0)}
+          \ifdim\c pt=1pt \fill[good!75] (\i-.4,0) rectangle (\i+.4,\v);
+          \else\ifdim\c pt=2pt \fill[bad!75] (\i-.4,0) rectangle (\i+.4,\v);
+          \else \fill[muted!50] (\i-.4,0) rectangle (\i+.4,\v); \fi\fi
+        }
+        \draw[thick] (0.3,0) -- (24.7,0);
+        \draw[dashed, bad] (0.3,.47) -- (24.7,.47) node[right, font=\tiny, align=left] {best\\$-$15};
+        \node[font=\scriptsize, good!70!black] at (3,.78) {top 5};
+        \node[font=\scriptsize, bad] at (22,.3) {worst 5};
+        \node[font=\scriptsize, below] at (12.5,0) {legal moves, best $\to$ worst (illustration)};
+        \node[font=\scriptsize, rotate=90] at (-1.2,.33) {win probability};
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{.45\textwidth}
+      \small
+      \begin{itemize}
+        \item \hl{Top pass}: depth 10, best 5 moves\\ win probability after the best, gaps to 2nd--5th
+        \item \hl{Worst pass}: depth 4, \emph{every} legal move\\ 5 worst losses, share of moves losing $\geq$ 5 / 10 / 15 points
+        \item 31 + 8\,ms per position instead of 136\,ms for all moves at depth 10
+        \item The move actually played is \textbf{never} looked at
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{.6em}
+  \centering\small One good move among thirty bad ones is a trap; thirty good moves are not.
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 7 methods
+\begin{frame}{Methods}
+  \small
+  \begin{columns}[T]
+    \begin{column}{.5\textwidth}
+      \footnotesize
+      \begin{tabular}{@{}ll@{}}
+        \toprule
+        Method & Why \\
+        \midrule
+        Bucket rate (+ 5 simple ones) & \textbf{baselines} \\
+        Naive Bayes & lower reference \\
+        Logistic regression & calibrated, explains \\
+        Linear SVM (+ Platt) & margin, not likelihood \\
+        \textbf{Decision tree} & \textbf{symbolic}: rules \\
+        Random forest & lowers variance \\
+        Gradient boosting, XGBoost & lower bias \\
+        \textbf{Neural network} & \textbf{non-symbolic}, smooth \\
+        \bottomrule
+      \end{tabular}
+    \end{column}
+    \begin{column}{.46\textwidth}
+      \footnotesize
+      \begin{itemize}
+        \item Every learner twice: \hl{context} (38 features) and \hl{engine} (+ 15 Stockfish)
+        \item Natural class mix, outputs a \textbf{probability}; a cut-off only afterwards
+        \item \hl{Tuning}: Optuna (TPE), 10--30 trials per method, each fitted on 1M moves and scored on the
+          validation games (log loss); best settings refitted on all
+        \item Second round where a best value sat at the edge of its range
+        \item One hold-out, not 5-fold: a 5-fold check of best vs.\ second-best showed ties only
+        \item Ablation: every feature group left out / alone
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 8 evaluation
+\begin{frame}{Evaluation setup}
+  \small
+  \begin{columns}[t]
+    \begin{column}{.48\textwidth}
+      \hl{Split by game, stratified by group}
+      \begin{itemize}
+        \item 80\,\% training (10\,\% of it: validation games) / 20\,\% test
+        \item Moves of one game never on both sides
+        \item Test games used \textbf{once}; runs A and B share them
+      \end{itemize}
+      \hl{Why not accuracy?}
+      \begin{itemize}
+        \item ``Never a blunder'' is right on $\approx$ 95\,\% of moves
+      \end{itemize}
+    \end{column}
+    \begin{column}{.48\textwidth}
+      \hl{Scores}
+      \begin{itemize}
+        \item Probabilities: log loss, Brier, calibration error
+        \item Order: \textbf{PR-AUC}, ROC-AUC
+        \item Decision (cut-off from validation): precision, recall, F1, MCC
+        \item \textbf{Top 5\,\%} riskiest moves: precision, recall, lift
+        \item 95\,\% intervals: 1,000 bootstrap resamples of whole games
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 9 results
+\begin{frame}{Results on the test games}
+  \begin{columns}[c]
+    \begin{column}{.5\textwidth}
+      \scriptsize
+      \begin{tabular}{@{}lrrr@{}}
+        \toprule
+         & \multicolumn{2}{c}{PR-AUC} & Lift \\
+        Method & context & engine & top 5\,\% \\
+        \midrule
+        Bucket rate & \multicolumn{2}{c}{\tbd} & \tbd \\
+        Naive Bayes & \tbd & \tbd & \tbd \\
+        Logistic regression & \tbd & \tbd & \tbd \\
+        Linear SVM & \tbd & \tbd & \tbd \\
+        Decision tree & \tbd & \tbd & \tbd \\
+        Random forest & \tbd & \tbd & \tbd \\
+        Gradient boosting & \tbd & \tbd & \tbd \\
+        XGBoost & \tbd & \tbd & \tbd \\
+        Neural network & \tbd & \tbd & \tbd \\
+        \bottomrule
+      \end{tabular}
+    \end{column}
+    \begin{column}{.47\textwidth}
+      \open{\linewidth}{4.2cm}{Precision--recall curves: bucket rate vs.\ best run of each method\\
+        (\texttt{data/validation/figures/})}
+    \end{column}
+  \end{columns}
+  \vspace{.5em}
+  \small \textcolor{red}{Message: best method beats the baseline by \tbd; Stockfish adds \tbd.}
+  \textcolor{muted}{Trial on 1,500 games: PR-AUC 0.24 vs.\ 0.08, lift $\approx$ 6.}
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 10 balancing + features
+\begin{frame}{Balanced or not? And what matters?}
+  \begin{columns}[t]
+    \begin{column}{.48\textwidth}
+      \hl{Run A vs.\ run B} (same test games)\\[.4em]
+      \open{\linewidth}{3.6cm}{PR-AUC, log loss, calibration:\\ A vs.\ B for 4 methods, with intervals}\\[.3em]
+      \small\textcolor{red}{Message: \tbd}
+    \end{column}
+    \begin{column}{.48\textwidth}
+      \hl{Feature groups} (ablation, importance)\\[.4em]
+      \scriptsize
+      \begin{tabular}{@{}lrr@{}}
+        \toprule
+        XGBoost, PR-AUC & without & only \\
+        \midrule
+        all groups & \multicolumn{2}{c}{0.315} \\
+        Stockfish & \textbf{0.263} & 0.206 \\
+        history & 0.279 & \textbf{0.219} \\
+        evaluation & 0.299 & 0.104 \\
+        board & 0.302 & 0.105 \\
+        rating & 0.308 & 0.070 \\
+        game & 0.313 & 0.078 \\
+        clock & 0.313 & 0.089 \\
+        \bottomrule
+      \end{tabular}\\[.3em]
+      \small Difficulty of the position first, the game's history second; clock and rating add little
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 11 tree + errors
+\begin{frame}{What the tree says, where the models fail}
+  \begin{columns}[t]
+    \begin{column}{.48\textwidth}
+      \hl{Decision tree, depth 4}\\[.4em]
+      \open{\linewidth}{3.8cm}{Top splits of the tree as a diagram\\ two or three rules in words}
+    \end{column}
+    \begin{column}{.48\textwidth}
+      \hl{Errors of the best model}\\[.4em]
+      \open{\linewidth}{3.8cm}{Missed blunders and false alarms by situation;\\ PR-AUC by speed, rating, game
+        phase, time left}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------------------------------- 12 conclusions
+\begin{frame}{Conclusions}
+  \begin{columns}[t]
+    \begin{column}{.5\textwidth}
+      \hl{What we found}
+      \begin{itemize}
+        \item \textcolor{red}{Best model vs.\ baseline: \tbd}
+        \item \textcolor{red}{Stockfish's view of the choice: \tbd}
+        \item \textcolor{red}{Balancing: \tbd}
+        \item \textcolor{red}{Strongest signals: \tbd}
+      \end{itemize}
+    \end{column}
+    \begin{column}{.46\textwidth}
+      \hl{Limitations}
+      \begin{itemize}
+        \item Only games players chose to analyse have labels
+        \item One month; same players in training and test
+        \item Labels from Lichess's own analysis, features from a shallower search
+      \end{itemize}
+      \hl{Use}
+      \begin{itemize}
+        \item Ranks the dangerous moments of a game: training, broadcasts
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{1em}
+  \centering\large Thank you! Questions?
+\end{frame}
+
+\end{document}

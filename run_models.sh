@@ -1,0 +1,59 @@
+#!/bin/bash
+# All training runs of the paper and their validation, for run A (data/) and run B (data_balanced/).
+# A step whose result is already there is skipped. Logs: data/runs/logs/<step>.log
+#
+#   bash run_models.sh
+#   PY=".venv/Scripts/python.exe" bash run_models.sh
+set -euo pipefail
+cd "$(dirname "$0")"
+PY=${PY:-"uv run python"}
+METHODS="naive_bayes logistic_regression svm decision_tree random_forest gradient_boosting xgboost neural_network"
+
+step() {
+  local name=$1
+  local done=$2
+  shift 2
+  local data=${IE500_DATA:-data}
+  if [ -n "$done" ] && [ -e "$data/runs/$done" ]; then
+    echo "$(date '+%F %T') skip $name ($data)"
+    return
+  fi
+  mkdir -p "$data/runs/logs"
+  echo "$(date '+%F %T') start $name ($data)"
+  if ! "$@" > "$data/runs/logs/$name.log" 2>&1; then
+    echo "$(date '+%F %T') FAILED $name, see $data/runs/logs/$name.log"
+    exit 1
+  fi
+}
+
+models() {
+  step bucket_rate_month bucket_rate/month/run.json $PY -m src.04_data_mining.bucket_rate.train --source month
+  step bucket_rate_train bucket_rate/train/run.json $PY -m src.04_data_mining.bucket_rate.train --source train
+  step baselines baseline/.done sh -c "$PY -m src.04_data_mining.baseline.train && touch $IE500_DATA/runs/baseline/.done"
+  for f in context engine; do
+    cv=""
+    if [ "$f" = engine ]; then
+      cv="--cv 0"
+    fi
+    for m in $METHODS; do
+      step "tune_${m}_$f" "$m/${f}_tuned/run.json" $PY -m src.04_data_mining.tune --method "$m" --features "$f" $cv "$@"
+    done
+  done
+}
+
+# run A: tuning, the readable tree, ablation, validation, importance
+export IE500_DATA=data IE500_SELECTION=stratified
+models
+step tree_rules decision_tree/engine_depth4/run.json $PY -m src.04_data_mining.decision_tree.train --features engine --depths 4 --name engine_depth4
+for f in context engine; do
+  step "ablation_xgboost_$f" "ablation/.done_xgboost_$f" sh -c "$PY -m src.04_data_mining.ablation --method xgboost --features $f && touch data/runs/ablation/.done_xgboost_$f"
+done
+step validate "" $PY -m src.05_evaluation.validate
+step importance "" $PY -m src.04_data_mining.importance
+
+# run B: balanced training games with the settings of run A
+export IE500_DATA=data_balanced IE500_SELECTION=balanced
+models --params-from data --cv 0
+export IE500_DATA=data IE500_SELECTION=stratified
+step validate_with_balanced "" $PY -m src.05_evaluation.validate --with balanced=data_balanced
+echo "$(date '+%F %T') all done"

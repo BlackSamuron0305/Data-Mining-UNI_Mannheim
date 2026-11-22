@@ -1,0 +1,41 @@
+# uv: the environment is built locally by `uv sync`
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# keys of the Lichess storage (copy .env.example to .env)
+.env
+
+# job scripts for bwUniCluster (personal workspace paths)
+cluster/
+
+# built by the scripts in src/ (see data/README.md)
+data/*
+!data/README.md
+# other data folders (IE500_DATA), e.g. data_balanced/ of the balancing experiment
+data_*/
+cache/
+
+# LaTeX build files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+
+# university slide template
+submission/presentation/PPT_Vorlagen_WIM_16x9.zip

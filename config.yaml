@@ -1,0 +1,88 @@
+# Settings of the data selection. Every script reads them from here (src/config.py).
+seed: 42
+workers: 16                  # processes that parse the games; the environment variable IE500_WORKERS overrides it
+
+source:
+  # The raw monthly files of database.lichess.org (rated standard games), unchanged, on the team's read-only S3
+  # storage (copies of 2026-08 and 2026-09, checked against Lichess's sha256 sums). Endpoint, bucket and keys
+  # come from .env (a copy of .env.example).
+  month: "2026-09"
+  key: lichess_db_standard_rated_{month}.pgn.zst
+  local_dir: null            # folder with the same files on this computer (null: cache/raw/), read instead of S3 if
+                             # the file is there; LICHESS_LOCAL_DIR (or .env) overrides it. The download scripts of
+                             # src/01_selection/ put the files there
+
+filters:                     # complete cases (src/01_selection/preparation/cleanup/filters.py)
+  speeds: [bullet, blitz, rapid, classical]      # ultrabullet and correspondence are dropped
+  terminations: [Normal, Time forfeit]           # abandoned games and rule infractions are dropped
+  min_plies: 20                                  # at least 10 moves by each player
+
+selection:
+  # Group of a game: speed x Elo of the mean of both ratings. Bucket of a move: speed x Elo of the mover x the
+  # mover's time left before the move. See src/01_selection/.
+  n_games: 350000            # training + test games
+  test_frac: 0.20            # share of test games inside every group
+  elo_bin: 250               # Elo bins: below 750, 750-1000, ..., 1750-2000, 2000 and above
+  elo_min: 500
+  elo_max: 2000
+  window: 30                 # time left in 30 s steps ...
+  window_max: {bullet: 120, blitz: 300, rapid: 900, classical: 1800}   # ... up to the usual longest start (last step open)
+  min_games: 100             # buckets with fewer games are kept but marked as uncertain
+  pool_rate: 0.10            # share of the complete games kept as the pool that the selections draw from; the
+                             # balanced selection takes its replacement games from it as well
+  check_draws: 20            # fresh stratified draws that show how far a selection may stray from the month by chance
+
+features:
+  # One row per move of the selected games, with what is known before the move is played
+  # (src/02_preprocessing/common/extract.py).
+  recent_moves: 5            # the mover's last moves for the recent averages (loss, time spent)
+  eco_from_ply: 12           # the opening letter (ECO) is given from this ply on: Lichess assigns the code from the
+                             # opening moves, so earlier it would tell moves that are not played yet
+  marks: {inaccuracy: 0.05, mistake: 0.10, blunder: 0.15}   # loss in win probability (0-1) of Lichess's marks,
+                             # used to classify the engine's candidate moves
+
+engine:
+  # Stockfish on the position before every move (src/02_preprocessing/with_stockfish/engine.py). The program is the
+  # environment variable STOCKFISH_PATH, else `path` (a name on PATH or a file).
+  path: stockfish
+  # Two passes per position (limits as python-chess chess.engine.Limit, e.g. {depth: 10} or {nodes: 80000}):
+  top: {limit: {depth: 10}, lines: 5}   # deep search of the best 5 moves: best score and the gaps to moves 2-5
+  worst: {limit: {depth: 4}}            # shallow search of every legal move: worst 5, share of losing moves
+  threads: 1                 # per engine; one engine per worker process
+  hash_mb: 16
+  games: {train: null, test: null}   # games per part to analyse (a fixed random subset); null = every game of the part
+  batch: 50                  # games per output file, so that a stopped run continues where it was
+
+training:
+  valid_frac: 0.10           # training games held out, by game, for early stopping and choosing between runs
+  max_train_games: null      # random subset of the training games for a quick run; null = all
+  xgboost_device: cpu        # cpu, or cuda to fit XGBoost on an NVIDIA GPU (src/04_data_mining/xgboost/)
+  predict_batch: 2000000     # moves per prediction call, to keep the memory down
+
+tuning:
+  # Hyperparameter search per method on the held-out games (src/04_data_mining/tune.py), then a refit of the best settings.
+  sampler: tpe               # tpe (Optuna, the ranges of SPACE in each train.py) or grid (GRID: Table 4.2 of the paper)
+  objective: log_loss        # score of a trial on the held-out moves: log_loss, pr_auc, roc_auc, brier, brier_skill, ece
+  tune_moves: 1000000        # every trial fits on a random subset of whole fitting games with about this many moves
+  trials: {naive_bayes: 25, logistic_regression: 10, decision_tree: 20, random_forest: 16, gradient_boosting: 25,
+           xgboost: 30, neural_network: 20, svm: 20}
+  # The refit of the best settings uses all fitting moves (about 17 million), except these methods, which get a
+  # random subset of whole games of this many moves: the forest's deep trees, the network's epochs and the SVM's
+  # dense float64 matrix (with the calibration) take hours or tens of GB on all of them.
+  refit_max_moves: {random_forest: 5000000, neural_network: 5000000, svm: 5000000}
+  cv_check: 5                # after the search: best vs second-best settings on 5 folds of whole tuning games; 0 = off
+  ablation_max_moves: 5000000  # fitting moves per variant of the ablation (src/04_data_mining/ablation.py; whole games); null = all
+  importance_moves: 200000   # held-out moves for the permutation importance (src/04_data_mining/importance.py)
+  importance_repeats: 3      # shuffles per group
+
+evaluation:
+  # Beyond the main scores of the validation (src/05_evaluation/validate.py). The cut-off of a run (a move is flagged
+  # from it on) is chosen for the highest F1 on the run's own held-out training games and used unchanged on test.
+  top_share: 0.05            # precision, recall and lift among this share of the moves with the highest prediction
+  bootstrap: 1000            # resamples of whole test games for the 95% intervals; 0 = none (--bootstrap overrides)
+  bootstrap_bins: 5000       # steps of the predictions for the PR-AUC of the resamples (more: closer, a bit slower)
+  plot_runs: 6               # figures: the baseline and the best run of each method by valid log loss, at most 6
+  min_moves: 1000            # subgroups with fewer common test moves are left out of by_subgroup.csv and the figures
+  move_bands: [10, 20, 30, 40]          # game phase by move number: 1-10, 11-20, 21-30, 31-40, 41+
+  clock_bands: [0.1, 0.25, 0.5, 0.75]   # time left / (start time + 40 x increment): below 10%, 10-25%, ..., 75% and above
+  eval_bands: [0.1, 0.3, 0.7, 0.9]      # the mover's win probability before the move: 0-10%, 10-30%, ..., 90-100%

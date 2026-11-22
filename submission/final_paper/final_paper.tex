@@ -1,0 +1,754 @@
+% IE500 Data Mining - final paper (project report).
+% LaTeX template of the DWS thesis (thesis.tex), as the course requires.
+% Do not change document class, margins, fonts, etc.
+\documentclass[a4paper,oneside,bibliography=totoc]{scrbook}
+
+% some useful packages (add more as needed)
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{latexsym}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{algorithm} % you can modify the algorithm style to your liking
+\counterwithin{algorithm}{chapter} % so that algorithms have chapter numbers as well
+\usepackage{algorithmic}
+\usepackage{csquotes}
+\renewcommand{\algorithmiccomment}[1]{\hfill\textit{// #1}}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage[colorlinks,citecolor=Green]{hyperref} % you may change/remove the colors
+\usepackage[bottom]{footmisc} % footnotes below a figure at the bottom of the page
+\usepackage{listings} % excerpt of the game file, set as code (as in the proposal)
+\lstset{basicstyle=\ttfamily\scriptsize, columns=fullflexible, keepspaces=true,
+  backgroundcolor=\color{black!6}, frame=single, rulecolor=\color{black!30}, framesep=3pt,
+  xleftmargin=4pt, xrightmargin=4pt, aboveskip=0pt, belowskip=0pt,
+  moredelim={[is][\color{BrickRed}]{@}{@}}} % @...@ marks the blunder
+
+% chicago citation style
+\usepackage{natbib}
+\bibliographystyle{chicagoa}
+\setcitestyle{authoryear,round,semicolon,aysep={},yysep={,}} \let\cite\citep
+\renewcommand{\bibfont}{\small}
+\setlength{\bibsep}{1pt}
+
+% Page limit (12 pages, at most 10 of content): chapters run on instead of starting a new page each.
+% Class, margins and fonts stay those of the template.
+\RedeclareSectionCommand[style=section, beforeskip=-1.4\baselineskip, afterskip=.6\baselineskip,
+  font=\Large\sffamily\bfseries]{chapter}
+\RedeclareSectionCommand[beforeskip=-.9\baselineskip, afterskip=.3\baselineskip]{section}
+\setlength{\textfloatsep}{8pt plus 2pt minus 3pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\abovecaptionskip}{3pt}
+\renewcommand{\topfraction}{.85}\renewcommand{\textfraction}{.1}\renewcommand{\floatpagefraction}{.8}
+
+% Not known yet. \tbd: a number from the census, the selection or the runs (data/...). \res{...}: a result
+% sentence to be written once the runs are done. Search for both before submitting; none may be left.
+\newcommand{\tbd}{\textcolor{red}{\textbf{??}}}
+\newcommand{\res}[1]{\textcolor{red}{[\emph{#1}]}}
+% A box of the size the figure will have, so that the page count stays honest.
+\newcommand{\placeholder}[2]{\fbox{\parbox[c][#1][c]{.96\linewidth}{\centering\small\color{red}#2}}}
+
+% team number, names and title (shared with the proposal and the presentation)
+\input{../team}
+
+\begin{document}
+
+% Course limits: at most 12 pages including the title/contents page and the reference page,
+% at most 10 pages of content, no appendix. Title, contents and AI declaration share the first page.
+\frontmatter
+\KOMAoptions{titlepage=false}
+\subject{IE500 Data Mining -- Project Report}
+\title{\ProjectTitle}
+\subtitle{\ProjectSubtitle}
+\author{Team \TeamNumber\\[.3em] \TeamMembers}
+\date{\SubmissionDate}
+\publishers{{\small Submitted to}\\
+  Data and Web Science Group\\
+  University of Mannheim\\}
+\maketitle
+
+% table of contents
+\begingroup%
+\hypersetup{hidelinks}% disable link color in TOC only
+\setuptoc{toc}{leveldown}% heading as a section, so that it stays on the title page
+\setcounter{tocdepth}{0}%
+\tableofcontents%
+\endgroup
+
+% Declare below which AI tools you used in the process of writing your work,
+% including text, image, code, and data generation (required by the course).
+\begin{center}
+  \textbf{Declaration of Used AI Tools} \\[.3em]
+  \footnotesize
+  \begin{tabularx}{\textwidth}{@{}lXlc@{}}
+    \toprule
+    Tool & Purpose & Where? & Useful? \\
+    \midrule
+    % "Useful?" is the team's own judgement; fill it in.
+    Claude Code (Anthropic) & Code review; code of training, tuning, engine features, leakage check,
+      validation and cluster jobs; first drafts of the text and slides & \texttt{src/}, Ch.~1--6 & \\
+    \bottomrule
+  \end{tabularx}
+\end{center}
+
+% okay, start new numbering ... here is where it really starts
+\mainmatter
+
+% ======================================================================================================
+% Course outline: application area and goals (0.5 pages)
+\chapter{Application Area and Goals}
+\label{ch:goals}
+
+Lichess, a free chess server, published 89,616,462 rated games for September 2026 alone
+\cite{lichessdb}, most of them bullet and blitz games in which a player has a few minutes for the whole
+game. Many are not won by the better plan but lost by one bad move. Lichess calls such a move a
+\emph{blunder}: it lowers the mover's winning chances, a logistic function of the Stockfish evaluation
+\cite{lichessaccuracy}, by at least 15 percentage points (0.3 on Lichess's scale from $-1$ to 1)
+\cite{lichessadvice}; an analysed game marks it with ``??'' (Figure~\ref{fig:blunder}).
+
+% blunder_example.pdf is the board figure of the proposal (submission/proposal/)
+\begin{figure}[tb]
+  \begin{minipage}[c]{0.18\textwidth}
+    \includegraphics[width=\linewidth]{../proposal/blunder_example}
+  \end{minipage}\hfill
+  \begin{minipage}[c]{0.79\textwidth}
+\begin{lstlisting}
+[WhiteElo "1413"] [BlackElo "1452"] [TimeControl "600+0"]
+28. cxd5 { [%eval -0.36] [%clk 0:00:40] }
+28... cxd5 { [%eval -0.32] [%clk 0:06:22] }
+29. @Qc3??@ { [%eval -9.42] [%clk 0:00:18] }
+29... Qxc3 { [%eval -9.41] [%clk 0:06:18] } 0-1
+\end{lstlisting}
+    \caption{A game of the data (\href{https://lichess.org/Eh02O2q8}{\texttt{lichess.org/Eh02O2q8}}): with
+      40 seconds left against 6:22, White puts the queen on an undefended square; White's winning chances
+      fall from 47\,\% to 3\,\%.}
+    \label{fig:blunder}
+  \end{minipage}
+\end{figure}
+
+An engine tells how good a position is under perfect play, not how likely a human of a given strength
+and with a given time left is to go wrong in it. Earlier work modelled human play, for example which move
+a player of a given rating makes \cite{mcilroyyoung2020maia}. We look at the kind of move that decides
+most games: \emph{Can a model predict whether a player will blunder on their next move, from what is
+known before it: clocks, position, evaluation, ratings and the course of the game?} Such a model could
+show players where they tend to blunder, show spectators how hard a position is for the humans at the
+board, and tell which conditions make decisions under time pressure fail.
+
+The task is binary classification of moves, with about one blunder in twenty. Our goals:
+(1)~\emph{prediction}: beat the strongest simple baseline, the blunder rate per speed, rating and time
+left, in Average Precision and log loss on unseen games; (2)~\emph{explanation}: which information
+carries the signal, in particular what a chess engine's view of the position adds, and readable rules;
+(3)~\emph{robustness} across speeds, ratings and game phases; (4)~\emph{sample design}: whether training
+games balanced towards the month's blunder rates give better models than a stratified random draw.
+
+% ======================================================================================================
+% Course outline: profile (structure and size) of the data set, at least 1 page.
+% Checklist: distribution of the target, all attributes and their types, data quality, correlation.
+\chapter{Data Set Profile}
+\label{ch:data}
+
+We use the Lichess Open Database \cite{lichessdb} (licence CC0), one file per month with every rated
+standard game; ours is September 2026: 89,616,462 games, 29.2~GB of zstd-compressed PGN text. A game is
+a block of 17 header lines and one line of moves. Every move carries the mover's clock and, in games a
+player had analysed, the Stockfish evaluation after it and the marks \texttt{?!}, \texttt{?} or
+\texttt{??}. The target is the ``??'' on a move. Table~\ref{tab:attributes} lists every attribute.
+
+\begin{table}[tb]
+  \centering\footnotesize
+  \caption{The attributes of a game: \checkmark{} feature, F only to filter or draw, T target, $\times$
+    removed. Counts from the first 42,759 games of the month.}
+  \label{tab:attributes}
+  % header fields and counts: first three zstd frames of lichess_db_standard_rated_2026-09.pgn.zst
+  \begin{tabularx}{\textwidth}{@{}llXc@{}}
+    \toprule
+    Attribute & Type & Values & Use \\
+    \midrule
+    \texttt{Event} & categorical & \texttt{Rated Blitz game}, \dots{} \texttt{tournament}, \dots{} \texttt{swiss} & \checkmark \\
+    \texttt{Site} & identifier & link to the game, e.g.\ \texttt{lichess.org/mQMQpBqI} & F \\
+    \texttt{UTCDate}, \texttt{Date}, \texttt{Round} & date, constant & day of the game; always \texttt{-} & $\times$ \\
+    \texttt{UTCTime} & time & start of the game (UTC), e.g.\ \texttt{00:33:03} & \checkmark \\
+    \texttt{White}, \texttt{Black} & identifier & user names, about 24,600 distinct ones each & $\times$ \\
+    \texttt{White/BlackElo} & integer & rating before the game, e.g.\ \texttt{1500} & \checkmark \\
+    \texttt{White/BlackTitle} & categorical & \texttt{BOT}, \texttt{FM}, \dots; in 1\,\% of the games & F \\
+    \texttt{TimeControl} & categorical & start time + increment in seconds, e.g.\ \texttt{180+0} & \checkmark \\
+    \texttt{ECO}; \texttt{Opening} & categorical & opening code, 395 values; name, 1,672 values & \checkmark; $\times$ \\
+    \texttt{Termination} & categorical & \texttt{Normal}, \texttt{Time forfeit}, \texttt{Abandoned}, \dots & F \\
+    \texttt{Result}; \texttt{RatingDiff} & categorical; integer & \texttt{1-0}, \dots; rating change through the game & $\times$ \\
+    \midrule
+    move; \texttt{[\%clk]} & categorical; duration & e.g.\ \texttt{Qc3}; the mover's time left after the move & \checkmark \\
+    \texttt{[\%eval]} & numeric & evaluation after the move in pawns, or \texttt{\#n} for mate in $n$ & \checkmark \\
+    \texttt{?!}, \texttt{?}; \texttt{??} & categorical & inaccuracy, mistake; blunder (earlier moves: feature) & \checkmark; T \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\textbf{Kept and removed.} The ratings (Glicko-2; we call them Elo, as the file does) give the mover's,
+the opponent's and their difference; \texttt{TimeControl} gives start time and increment, \texttt{Event}
+the kind of game (lobby, arena or swiss), \texttt{UTCTime} the hour as a weak proxy for fatigue. Of
+\texttt{ECO} we keep the letter (five opening families), and only from ply~12 on, because Lichess derives
+it from the opening moves. Everything known only after the predicted move is removed: the result, the
+rating changes, and the move itself with its clock and evaluation, from which the label follows. User
+names would let a model memorise players instead of situations; the date says nothing within one month.
+
+\textbf{Quality and target.} Clocks are recorded in almost every game, but evaluations and marks only in
+analysed games, about 10\,\% of the month; a game without them has no label and is dropped, not
+imputed. Of the 580 million moves of the complete games, 5.51\,\% are blunders, so never predicting
+one is right on 94.5\,\% of the moves. Blunders are not spread evenly (Figure~\ref{fig:rates}). In a
+first sample of 945,171 moves the rate was 7.8\,\% below a rating of 1,200 and 3.9\,\% from 2,000 on,
+8.2\,\% with less than a twentieth of the time left and 4.8\,\% with more than half, and 27.7\,\% right
+after the opponent lost 20 points of win probability, against 4.3\,\% otherwise. These correlations are
+what the features and the baseline build on.
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=\textwidth]{figures/rate_by_time_left}%
+  \caption{Blunder rate by the mover's time left (30-second steps) and speed: all complete games of
+    September 2026 (line) and the selected training and test games (points, 95\,\% intervals). The dips
+    lie at the common start times (3, 5, 10, 15 minutes), where the moves are opening moves played with the
+    full clock.}
+  \label{fig:rates}
+\end{figure}
+
+% ======================================================================================================
+% Course checklist: missing values, outliers, validity, inconsistencies, duplicates, normalisation,
+% feature generation, binning, feature subset selection, external knowledge.
+\chapter{Preprocessing}
+\label{ch:preprocessing}
+
+\section{Complete Cases and Strata}
+\label{sec:filters}
+
+We read every game of the month once, in parallel over the independently compressed blocks of the file,
+and keep the \emph{complete cases}: speed bullet to classical, both ratings known, no computer player,
+ended normally or on time, at least 20 plies, every move legal, a clock and an evaluation on every move
+(Table~\ref{tab:funnel}). Abandoned games say little about decisions under pressure; games under 20
+plies are mostly early resignations. The speed is Lichess's own, from the estimated duration, start time
++ 40 $\times$ increment \cite{scalachessspeed}: bullet under 3 minutes, blitz under 8, rapid under 25,
+classical above.
+
+\begin{table}[tb]
+  \centering\footnotesize
+  \caption{Games of September 2026 after each filter step, by speed.}
+  \label{tab:funnel}
+  % numbers: cache/census/funnel.csv
+  \begin{tabular}{@{}lrrrrr@{}}
+    \toprule
+    Step & bullet & blitz & rapid & classical & all \\
+    \midrule
+    all games of the file$^a$ & 31,674,536 & 41,228,526 & 15,224,219 & 555,136 & 89,616,462 \\
+    speed bullet to classical, with evaluations & 1,828,324 & 4,000,639 & 2,814,790 & 176,661 & 8,820,414 \\
+    ratings, players, termination, $\geq$ 20 plies & 1,817,714 & 3,957,995 & 2,760,392 & 170,797 & 8,706,898 \\
+    clock and evaluation on every move (complete) & 1,817,701 & 3,957,938 & 2,760,358 & 170,792 & 8,706,789 \\
+    \midrule
+    \multicolumn{6}{@{}l}{\scriptsize $^a$ ``all'' includes 934,045 games of other speeds (ultrabullet,
+      correspondence).} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+A position depends on the moves before it, so the unit of sampling is the whole game. We form 28
+\emph{groups} of games: four speeds times seven bands of the mean rating of both players (below 750,
+steps of 250, 2,000 and above). The time left changes with every move, so it cannot group games; it
+defines the 756 \emph{buckets} of moves instead: speed $\times$ rating band of the mover $\times$ time
+left in 30-second steps. The buckets give the baseline and the check of the selection.
+
+\section{Selecting the Games: Three Designs}
+\label{sec:selection}
+
+The 8.7 million complete games are far more than an engine can analyse in our time, so we draw 350,000
+and split them inside every group into 80\,\% training and 20\,\% test games; no game gives moves to both.
+Every game has fixed random numbers, hashes of a seed and its id, so every draw can be repeated exactly.
+We discussed three designs (Table~\ref{tab:designs}).
+
+\begin{table}[tb]
+  \centering\footnotesize
+  \caption{Three ways to draw 350,000 games from the complete games of the month.}
+  \label{tab:designs}
+  \begin{tabularx}{\textwidth}{@{}p{2.4cm}XXl@{}}
+    \toprule
+    Design & What it fixes & Risk & Our use \\
+    \midrule
+    Fully random & nothing: every complete game has the same chance & shares of rare groups (e.g.\
+      classical above 2,000) vary by chance & yardstick \\
+    Stratified random & the share of every group, exactly as in the month; random inside a group & only
+      chance inside the groups & run A \\
+    Stratified + balanced & also the blunder rate of all 756 buckets, by swapping games until it
+      equals the month's & games are chosen by their label & run B \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+A \textbf{fully random} draw gives every group its share on average; stratification with proportional
+allocation gives it exactly and removes the chance variation of the shares \cite{cochran1977sampling},
+so it can only be closer to the month. \textbf{Stratified random} (run A) gives every group its share of
+the month's complete games, rounded by largest remainders, and draws at random inside.
+
+\textbf{Stratified and balanced} (run B) was our longest discussion. A random draw matches the month in
+every bucket only up to chance. The balancing swaps single games for other random games of the same
+group, again and again, until the blunder rate of every bucket equals the month's while each bucket's
+share of moves stays the month's. \emph{For} it: the models learn from a sample whose blunder rates are
+those of the population in every combination of speed, rating and time left. \emph{Against} it: it
+chooses games by their label. To lower a bucket's rate it drops games with blunders and adds games
+without, and these are not random games but calmer ones, with fewer earlier errors and simpler positions;
+the 756 rates we watch are fixed, every relation we do not watch may be bent. And balanced test games
+would favour the baseline, which predicts exactly the month's bucket rates. We settle this by experiment:
+run B balances only the \emph{training} games. The draw and split do not depend on the balancing, so runs
+A and B have the same 69,998 test games, and every model is fitted on both and scored on these
+(Section~\ref{sec:balancing}).
+
+Whether run A is as close to the month as chance allows, we test with the deviation of every bucket
+$b$, $z_b = (k_b - p_b m_b)/\sqrt{p_b(1-p_b)m_b}$ for $m_b$ moves, $k_b$ blunders and the month's rate
+$p_b$, summed as $\chi^2 = \sum_b z_b^2$ and compared with 20 fresh random draws of the same design.
+Run A's training part has $\chi^2 = 1{,}034$ over 742 buckets, inside the range of the random draws
+(877--1,095 between their 5th and 95th percentile; 75\,\% of them lie lower), its test part 968 (896--1,071).
+So run A is as close to the month as a random draw can be, no closer and no further. Run B's training part
+has $\chi^2 = 30$: the balancing swapped 18,352 of the 280,002 training games (6.6\,\%) and removed
+practically all deviation. The training part has 280,002 games with 18.7 million moves, the test part
+69,998 games with 4.7 million; blunder rates 5.505\,\% and 5.503\,\%, against 5.505\,\% in the month. A
+fixed 10\,\% of the training games is held out as \emph{validation games} for early stopping and tuning.
+
+\section{Features of a Move}
+\label{sec:features}
+
+We replay every game with python-chess \cite{pythonchess} and write one row per move, with what is known
+\emph{before} it: 38 features in six groups. \emph{Game}: speed, start time, increment, colour, move
+number, hour, kind of event, opening letter. \emph{Rating}: the mover's, the opponent's, their
+difference. \emph{Clock}: both clocks, the clock as a share of the estimated duration (30 seconds mean
+little in classical and much in bullet), their difference, the time spent on the last and the last five
+own moves and on the opponent's last. \emph{Evaluation}: the evaluation, capped at $\pm$10 pawns, and the
+mover's win probability. \emph{History}: the loss of win probability of the mover's last, last five, all
+and worst moves, their numbers of inaccuracies, mistakes and blunders, the moves since the last error, and
+the same for the opponent. \emph{Board}: legal moves, check, material of both sides.
+
+\textbf{Cleaning.} Missing values are structural: there is no previous move at the first move and no
+opening letter before ply~12. Methods that need complete inputs get the median of the fitting moves and an
+indicator per feature, so that ``no earlier move yet'' stays visible; trees route missing values
+themselves. Mate scores, the outliers of the evaluation, go to the cap. Illegal moves, missing clocks and
+duplicate game ids are checked in the filter. Numeric features are standardised and categorical ones
+one-hot encoded, fitted on the fitting moves only. We do not bin features for the learners, as trees find
+their own thresholds; the buckets of the baseline are such a binning.
+
+\section{Stockfish's View of the Choice}
+\label{sec:engine}
+
+The file's evaluations describe the position, and only through the move that was played. Whether a
+blunder is likely depends also on the \emph{choice}: a position where one move holds and thirty lose is a
+trap, one where almost every move is fine is not. The file does not contain this, so we compute it with
+Stockfish~19 \cite{stockfish} for the position before every move of every selected game, in two passes.
+The \emph{top} pass searches to depth 10 and keeps the best five moves: the win probability after the best
+one and how much the 2nd to 5th lose against it. The \emph{worst} pass scores every legal move at depth 4,
+cheap and enough to see that a move hangs the queen: the losses of the five worst moves, the number of
+moves within an inaccuracy of the best, and the share of moves losing at least an inaccuracy, a mistake or
+a blunder (15 features). On one core the passes take 31 and 8\,ms per position; one search of all moves at
+depth 10 took 136\,ms. The 24.4 million positions of both runs (run B's 17,468 new training games
+included) took about 15 hours on one desktop computer with 16 cores. We had prepared the same job for
+four nodes of bwUniCluster~3.0, but its queue would only have started it after the local run had
+finished. The move actually played is never looked at.
+
+\section{No Look Into the Future}
+\label{sec:leakage}
+
+The label follows from the evaluation after the move, so a feature that sees the move or what came after
+gives the answer away \cite{kaufman2012leakage}. Our prediction is: given a game up to move $N$, with all
+moves, clocks, ratings and engine features before it, how likely is move $N$ a blunder? We test this
+directly. For 2,000 random games (100 of them also with Stockfish) we cut the game at a random ply $N$, scramble everything Lichess wrote
+about move $N$ (mark, clock, evaluation), delete all later moves, set the result to unknown and compute
+the features again; rows $0,\dots,N$ must not change, engine columns included. One difference showed up
+and is no leak: Lichess starts a clock only after the player's first move, so that clock equals the
+start time and is known in advance. No feature changed in any of the games, while the scrambling did
+change the label of the cut move in 673 of them, so the check would have seen a feature that reads it.
+
+% ======================================================================================================
+% Course outline: different approaches and parameter settings/optimisations that we tried.
+% Checklist: baselines, at least one symbolic and one non-symbolic approach, hyperparameter tuning.
+\chapter{Data Mining}
+\label{ch:mining}
+
+\section{Setup and Methods}
+\label{sec:methods}
+
+Every method sees the same rows and outputs a probability, fitted on the training games without the
+validation games. Every learner is fitted twice: on the \emph{context} features (Section~\ref{sec:features})
+and on \emph{engine} (context plus the 15 Stockfish features); the difference is what the engine adds.
+We fit on the natural class mix: the applications need a risk, log loss rewards correct probabilities,
+resampling would shift every probability, and Average Precision depends only on the order of the moves.
+Where a yes or no is needed, a cut-off is chosen afterwards (Section~\ref{sec:setupeval}).
+Table~\ref{tab:methods} lists the methods; all learners but XGBoost \cite{chen2016xgboost} are from
+scikit-learn \cite{pedregosa2011sklearn}.
+
+\begin{table}[tb]
+  \centering\footnotesize
+  \caption{The methods. Interactions: whether a method can learn that two features matter together, such
+    as little time \emph{and} a sharp position.}
+  \label{tab:methods}
+  \begin{tabularx}{\textwidth}{@{}lllX@{}}
+    \toprule
+    Method & Kind & Interactions & Role \\
+    \midrule
+    Bucket rate (month; training games) & baseline & by the buckets & the yardstick of goal 1 \\
+    Five simple baselines & baselines & -- & what single variables give \\
+    Naive Bayes & probabilistic & no & lower reference \\
+    Logistic regression & linear & no & calibrated, coefficients explain \\
+    Linear SVM (SGD, Platt scaling) & linear, margin & no & margin instead of likelihood \\
+    Decision tree (CART) & symbolic & yes & readable rules \\
+    Random forest & bagged trees & yes & lowers variance \\
+    Gradient boosting (histogram) & boosted trees & yes & lowers bias, expected best \\
+    XGBoost & boosted trees & yes & second boosting, other regularisation \\
+    Neural network (MLP) & non-symbolic & yes & smooth instead of step-like \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\textbf{Baselines.} The \emph{bucket rate} gives every move the blunder rate of its bucket in the month
+(the test games are 0.4\,\% of it) or, as a check, in the training games, pulled towards its speed and
+rating rate by 50 moves so that thin buckets get no extreme rates. It is the strongest rule without
+learning: a model that does not beat it has learned nothing beyond speed, rating and time pressure. Five
+simpler ones (overall rate, per speed, speed $\times$ rating, per band of the win probability, ``the
+opponent just erred'') show what single variables give.
+
+\textbf{Linear and probabilistic.} \emph{Naive Bayes} assumes the features independent given the class;
+ours are strongly correlated (time left, its share and the clock difference say much the same), so we
+expect a fair order but overconfident probabilities \cite{niculescu2005calibration}. Features are mapped
+to normal distributions by their quantiles. \emph{Logistic regression} is calibrated by construction and
+its coefficients explain; as it cannot combine features, a clear lead of the trees means that situations
+carry more risk than their parts. The \emph{linear SVM} \cite{cortes1995svm} maximises a margin instead of
+the likelihood; on millions of rows it is trained by stochastic gradient descent with class weights
+(without them the hinge loss predicts ``no blunder'' everywhere), and Platt scaling \cite{platt1999} on
+20\,\% of the fitting games turns its scores into probabilities.
+
+\textbf{Trees and network.} The \emph{decision tree} \cite{breiman1984cart} is the symbolic method: time
+pressure sets in below a threshold rather than evenly, which a split captures together with its
+interaction with rating. Each leaf's rate is pulled towards the overall rate by 50 moves, so that a leaf
+without a blunder does not predict 0; for the paper we read a tree of depth 4. The \emph{random forest}
+\cite{breiman2001forests} averages deep trees on bootstrap samples and lowers variance; \emph{gradient
+boosting} \cite{friedman2001boosting} fits shallow trees to the errors of the ones before and lowers bias.
+Comparing them shows which error limits us. Boosting is the expected best method on tabular data, so we
+use two implementations that differ in tree growth and regularisation, scikit-learn's histogram variant
+\cite{ke2017lightgbm} and XGBoost, both stopped when the validation log loss has not improved for 30 or 50
+rounds. The \emph{neural network}, trained with Adam \cite{kingma2015adam}, forms smooth functions of all
+features at once and shows whether the step-like trees miss gradual effects; it keeps the epoch with the
+best validation log loss, by our own early stopping, as scikit-learn's would hold out random moves and so
+put moves of one game on both sides.
+
+\textbf{Not used.} $k$ nearest neighbours compares every move with millions of others and gives
+probabilities in steps of $1/k$; kernel SVMs grow faster than quadratically with the rows; SMOTE would
+invent moves between positions of different games. The proposal planned 5-fold cross-validation and
+undersampling; Section~\ref{sec:setupeval} explains why we use a hold-out instead, and resampling was
+dropped for the reasons above.
+
+\section{Hyperparameter Tuning}
+\label{sec:tuning}
+
+Every learner is tuned on the validation games by Bayesian optimisation with the tree-structured Parzen
+estimator \cite{bergstra2011tpe} of Optuna \cite{akiba2019optuna}, minimising the validation log loss.
+Each trial fits on a random subset of whole fitting games with about one million moves, so that 10 to 30
+trials per method fit into hours; the best settings are then fitted once on all 16.8 million fitting
+moves (five million for the forest, the network and the SVM, which need tens of gigabytes on all).
+Boosting rounds and epochs are set by early stopping. Table~\ref{tab:tuning} gives ranges and choices;
+every trial is kept in the run's \texttt{tuning.csv}.
+
+\textbf{Two rounds.} After the first round we looked at where the best settings lay. For five methods
+the best value sat at the edge of its range: the smoothing of naive Bayes at 0.6 of at most 1, the penalty
+of the SVM at $5\cdot10^{-3}$ of at most $10^{-2}$, the forest's leaf size at 23 of at least 20, the
+tree's depth at 15 of at most 16, and the network on the context features chose the largest layers with
+nearly the strongest penalty. A value at the edge means the best one may lie outside, so we widened these
+ranges once (Table~\ref{tab:tuning}) and searched these five methods again; the SVM, which had always
+stopped at its limit of 20 epochs, may now run 50, the network 100. With ten trials or fewer the search
+is in effect random (Optuna's first ten trials are), so naive Bayes, the SVM and the network also got more
+trials. The learning rate of both boosting methods also lay near its lower limit of 0.02. We kept that
+limit: a smaller rate needs proportionally more rounds for the same model, and in the first round the
+five best XGBoost trials differed by less than 0.0001 in log loss, far below the differences between
+methods. The second round found its best values inside the old ranges for all five methods (smoothing
+0.8 to 0.9, penalty $10^{-3}$ to $4\cdot10^{-3}$, depth 12 to 13, leaf size 28 to 29), so the limits
+had not held them back. The test scores moved by at most 0.004 in PR-AUC, up or down, which is the size of
+the confidence intervals. Two changes were real: naive Bayes with the engine features improved its log loss
+from 0.195 to 0.185 and halved its calibration error (0.046 to 0.024), as the stronger smoothing tempers
+its overconfident probabilities, and the network, now allowed 100 epochs, also halved its calibration
+error (0.0056 to 0.0030). A naive Bayes search with only
+12 trials first ended worse than the first round (it never tried the region of the old best), so we
+gave it 25; the trial counts in Table~\ref{tab:tuning} are those of the final round.
+
+\textbf{Is one hold-out enough?} The proposal planned 5-fold cross-validation. With 1.9 million
+validation moves and about 100,000 blunders in them, a trial's score barely depends on which games happen
+to be held out, while cross-validation would multiply every trial by five. We checked this instead of
+assuming it: for every method we fitted the best and the second-best settings of the search on five folds
+of whole tuning games and compared them fold by fold. Where the two settings differ clearly, the best one
+won in all five folds (naive Bayes, the SVM, the network) or four (the forest). For logistic regression
+and both boosting methods it won in only two of five, but there the two settings differ by less than
+0.00002 in mean log loss, about a fiftieth of how much the score moves from fold to fold (0.001): the
+two are equally good, and cross-validation would only have chosen between equals. So one hold-out picks the
+same model at a fifth of the cost.
+
+\begin{table}[tb]
+  \centering\footnotesize
+  \caption{Search ranges of the final round (log scale where marked; first-round limits in brackets) and the
+    chosen values, feature set engine.}
+  \label{tab:tuning}
+  \begin{tabularx}{\textwidth}{@{}lXl@{}}
+    \toprule
+    Method (trials) & Hyperparameters and ranges & Chosen \\
+    \midrule
+    Naive Bayes (25) & transform: quantile or standardise; variance smoothing $10^{-4}$--10 [1] (log) & quantile, 0.92 \\
+    Logistic regression (10) & $C$: $10^{-3}$--$10^{2}$ (log) & 57 \\
+    Linear SVM (20) & L2 penalty $\alpha$: $10^{-8}$--$10^{-1}$ [$10^{-2}$] (log); up to 50 [20] epochs & $3.9\cdot10^{-3}$ \\
+    Decision tree (20) & depth 2--24 [16]; moves per leaf 100--10,000 (log) & 12, 392 \\
+    Random forest (16) & moves per leaf 5 [20]--2,000 (log); features per split $\sqrt{p}$, $0.3p$, $0.5p$ & 29, $0.5p$ \\
+    Gradient boosting (25) & learning rate 0.02--0.3, leaves 15--255, leaf size 20--5,000, L2 $10^{-3}$--30 (all log)
+      & 0.031, 129, 2,101, 3.7 \\
+    XGBoost (30) & learning rate 0.02--0.3, child weight 1--1,000, L2 $10^{-3}$--30 (log); depth 3--10;
+      row and column sampling 0.5--1 and 0.4--1 & 0.020, 54, 3.5; 9; 0.77, 0.89 \\
+    Neural network (20) & layers (32), (64, 32), (128, 64), (256, 128) [not 256]; L2 $10^{-6}$--$10^{-1}$
+      [$10^{-2}$], learning rate $3\cdot10^{-4}$--$10^{-2}$ [$3\cdot10^{-3}$] (log); up to 100 [50] epochs
+      & (32), $3\cdot10^{-5}$, 0.0019 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\textbf{Feature groups.} To see which information carries the signal, the best method is refitted with
+each of the seven groups (game, rating, clock, evaluation, history, board, engine) left out, and with each
+group alone. We also shuffle one group at a time in 200,000 validation moves and measure how much the log
+loss rises (permutation importance).
+
+% ======================================================================================================
+% Course outline: evaluation setup (split, cross-validation), analysis of the errors of the best
+% method, discussion, comparison to the state of the art (together at least 2 pages).
+% Checklist: stratified? cost matrix? tuned ranges? symbolic model analysed? feature impact?
+\chapter{Evaluation}
+\label{ch:evaluation}
+
+\section{Setup}
+\label{sec:setupeval}
+
+\textbf{Split.} Training and test games are split inside each of the 28 groups, so the split is
+stratified by speed and rating, and by game, because moves of one game share players, clocks and position;
+a held-out move of a fitted game would look easier than a new game. The validation games choose every
+setting, the test games are used once. We use one hold-out instead of cross-validation: with 1.9
+million validation moves a score's standard error is small, and $k$ refits of every trial on millions of
+moves would multiply the cost by $k$; Section~\ref{sec:tuning} checks that this costs nothing. All runs
+are scored on the same moves.
+
+\textbf{Scores.} With one blunder in twenty moves accuracy is useless. We judge the probabilities by
+\emph{log loss}, the \emph{Brier score} (also as skill over always predicting the rate) \cite{brier1950}
+and the \emph{calibration error} over 20 bins \cite{guo2017calibration}, and the order of the moves by
+ROC-AUC and \emph{Average Precision} (PR-AUC), which unlike ROC-AUC reflects the rarity of blunders
+\cite{saito2015prc}. For a yes or no, each run's cut-off is chosen for the highest F1 on its validation
+moves and used unchanged on the test games, with precision, recall, F1, Matthews' correlation
+\cite{chicco2020mcc} and balanced accuracy. As a coach or a broadcast would flag only the riskiest
+moments, we also report precision, recall and lift among the 5\,\% of moves with the highest prediction.
+We use no cost matrix: a missed blunder and a false alarm cost different users different amounts, and
+the probability lets each choose a cut-off. Test scores come with 95\,\% intervals from 1,000 bootstrap
+resamples of whole test games \cite{efron1993bootstrap}.
+
+\section{Results on the Test Games}
+\label{sec:results}
+
+\begin{table}[tb]
+  \centering\footnotesize
+  \caption{Test scores without (context) and with (engine) the Stockfish features; best per column in
+    bold. Lift: blunder rate among the riskiest 5\,\% of moves over the overall rate.}
+  \label{tab:results}
+  \begin{tabular}{@{}lrrrrrrr@{}}
+    \toprule
+     & \multicolumn{2}{c}{PR-AUC} & \multicolumn{2}{c}{Log loss} & ROC-AUC & F1 & Lift top 5\,\% \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}
+    Method & context & engine & context & engine & engine & engine & engine \\
+    \midrule
+    Bucket rate (month) & \multicolumn{2}{c}{0.082} & \multicolumn{2}{c}{0.2062} & 0.636 & 0.139 & 1.80 \\
+    Best simple baseline (opponent just erred) & \multicolumn{2}{c}{0.107} & \multicolumn{2}{c}{0.1982} & 0.642 & 0.254 & 3.48 \\
+    Naive Bayes & 0.151 & 0.201 & 0.1949 & 0.1847 & 0.808 & 0.282 & 4.81 \\
+    Logistic regression & 0.197 & 0.235 & 0.1834 & 0.1714 & 0.834 & 0.312 & 5.51 \\
+    Linear SVM & 0.196 & 0.233 & 0.1848 & 0.1720 & 0.832 & 0.310 & 5.47 \\
+    Decision tree & 0.234 & 0.262 & 0.1718 & 0.1646 & 0.853 & 0.333 & 5.92 \\
+    Random forest & 0.250 & 0.289 & 0.1688 & 0.1599 & 0.866 & 0.355 & 6.35 \\
+    Gradient boosting & 0.263 & 0.317 & 0.1659 & 0.1551 & 0.878 & 0.374 & 6.74 \\
+    XGBoost & \textbf{0.267} & \textbf{0.321} & \textbf{0.1652} & \textbf{0.1545} & \textbf{0.879} & \textbf{0.377} & \textbf{6.80} \\
+    Neural network & 0.246 & 0.291 & 0.1691 & 0.1594 & 0.868 & 0.357 & 6.38 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=.72\textwidth]{figures/roc_pr}\\[.5em]
+  \includegraphics[width=.72\textwidth]{figures/subgroups_pr_auc}
+  \caption{Top: ROC and precision--recall curves on the test games for the bucket rate (dashed) and the
+    best runs with the engine features; the dots mark each run's cut-off chosen on the validation games.
+    Bottom: PR-AUC divided by the blunder rate of the subgroup (1 = guessing) by speed, rating, move number,
+    time left and the mover's win probability.}
+  \label{fig:curves}
+\end{figure}
+
+Table~\ref{tab:results} and Figure~\ref{fig:curves} show the test scores. \textbf{XGBoost with the engine
+features is the best run} in every column: PR-AUC 0.321 (95\,\% interval 0.318--0.323) against 0.082 of the
+bucket rate, and log loss 0.1545 against 0.2062, a quarter lower. Among the 5\,\% of moves it rates
+riskiest, 37\,\% are blunders, 6.8 times the overall rate, and they hold 34\,\% of all blunders; the bucket
+rate reaches a lift of 1.8 there. Gradient boosting follows closely (0.317); its interval overlaps XGBoost's
+only barely, and the two differ only in implementation. Every learner beats the bucket rate by far, even
+naive Bayes, and even the simplest rule ``the opponent just erred'' beats it in PR-AUC (0.107), a first
+sign of what the feature groups show below.
+
+\textbf{What Stockfish adds.} The engine features raise the PR-AUC of every method, by 0.03 to 0.05
+(XGBoost 0.267 to 0.321, outside both intervals); the gain is about the same for linear models and trees,
+so the engine's view of the choice is new information, not just a better form of the old.
+\textbf{Linear against trees.} Logistic regression and the SVM end far behind the tree ensembles (0.235
+against 0.321), although they see the same features: a large part of the risk lies in combinations, such
+as a sharp position \emph{after} the opponent's error, which a linear model cannot form. The SVM, fitted
+for a margin and calibrated afterwards, is no better than logistic regression. \textbf{Forest against
+boosting.} The random forest (0.289) stays clearly behind boosting even on the same five million moves
+(the XGBoost refit of the ablation on five million moves reaches 0.315), so the limit is bias, not variance:
+averaging deep trees does not find the many small effects that boosting adds up. The network (0.291) is level
+with the forest; smooth functions do not reveal effects the trees miss. \textbf{Naive Bayes} orders the
+moves fairly (ROC-AUC 0.81) but has the worst calibration of all learners (error 0.024 against 0.001 for
+boosting), as expected from its independence assumption; the readable tree of depth 4 (PR-AUC 0.198, lift
+5.3) already beats it.
+
+\section{Balanced or Not: Run A Against Run B}
+\label{sec:balancing}
+
+\begin{table}[tb]
+  \centering\footnotesize
+  \caption{The same methods fitted on stratified random (A) and balanced (B) training games, scored on the
+    same test games (feature set engine).}
+  \label{tab:balancing}
+  \begin{tabular}{@{}lrrrrrr@{}}
+    \toprule
+     & \multicolumn{2}{c}{PR-AUC} & \multicolumn{2}{c}{Log loss} & \multicolumn{2}{c}{Calibration error} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(l){6-7}
+    Method & A & B & A & B & A & B \\
+    \midrule
+    Naive Bayes & 0.201 & 0.201 & 0.1847 & 0.1847 & 0.0243 & 0.0244 \\
+    Logistic regression & 0.235 & 0.236 & 0.1714 & 0.1714 & 0.0027 & 0.0027 \\
+    Linear SVM & 0.233 & 0.232 & 0.1720 & 0.1721 & 0.0027 & 0.0026 \\
+    Decision tree & 0.262 & 0.262 & 0.1646 & 0.1646 & 0.0008 & 0.0007 \\
+    Random forest & 0.289 & 0.289 & 0.1599 & 0.1599 & 0.0036 & 0.0035 \\
+    Gradient boosting & 0.317 & 0.317 & 0.1551 & 0.1552 & 0.0009 & 0.0009 \\
+    XGBoost & 0.321 & 0.321 & 0.1545 & 0.1545 & 0.0007 & 0.0007 \\
+    Neural network & 0.291 & 0.289 & 0.1594 & 0.1599 & 0.0030 & 0.0015 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+If balancing only removed chance deviations, the models of run B would be at least as good as those of run
+A (Table~\ref{tab:balancing}); if it bent the relations it does not watch, they would be worse, most
+visibly in calibration within subgroups that cut across the buckets, such as after an opponent's error.
+Neither happened. For all eight methods, with both feature sets, the scores of A and B agree to the third
+decimal: PR-AUC differs by at most 0.003 (the network, the method with the most chance in its training),
+log loss by at most 0.0005, both far inside the 95\,\% intervals of a single run (about $\pm$0.0024 in
+PR-AUC). Within the subgroups of speed, rating, phase, time left and position, XGBoost's PR-AUC differs by
+at most 0.001 and its calibration by at most 0.0005. So the data support neither the hope nor the fear of
+Section~\ref{sec:selection}. The reason is plain once the results are in: the models see speed, rating and
+time left themselves, so a sample whose bucket rates match the month exactly teaches them nothing they
+cannot learn from a random sample of 18.7 million moves, and swapping 6.6\,\% of the games is too little to
+bend anything else. Balancing costs a second selection and raises a question every reader would ask;
+a stratified random draw is enough.
+
+\section{What the Models Use and Where They Fail}
+\label{sec:importance}
+
+\begin{table}[tb]
+  \centering\footnotesize
+  \caption{Feature groups: XGBoost with the best settings refitted on five million moves, with each group
+    left out or alone (test games), and the rise of the validation log loss when the group is shuffled in the
+    full model (permutation importance, share of the total rise).}
+  \label{tab:ablation}
+  \begin{tabular}{@{}lrrrrr@{}}
+    \toprule
+     & \multicolumn{2}{c}{Without the group} & \multicolumn{2}{c}{Only the group} & Shuffled \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}
+    Group & PR-AUC & Log loss & PR-AUC & Log loss & share \\
+    \midrule
+    none left out (all) & 0.315 & 0.1554 & & & \\
+    Engine (15) & 0.263 & 0.1658 & 0.206 & 0.1749 & 48\,\% \\
+    History (12) & 0.279 & 0.1602 & 0.219 & 0.1766 & 9\,\% \\
+    Evaluation (2) & 0.299 & 0.1587 & 0.104 & 0.1985 & 34\,\% \\
+    Board (6) & 0.302 & 0.1576 & 0.105 & 0.1980 & 4\,\% \\
+    Rating (3) & 0.308 & 0.1571 & 0.070 & 0.2115 & 2\,\% \\
+    Game (8) & 0.313 & 0.1557 & 0.078 & 0.2041 & 2\,\% \\
+    Clock (7) & 0.313 & 0.1556 & 0.089 & 0.2022 & 1\,\% \\
+    \midrule
+    Bucket rate (month) & \multicolumn{4}{c}{PR-AUC 0.082, log loss 0.2062} & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Table~\ref{tab:ablation} shows what the best model uses. Stockfish's view of the choice is the strongest
+group: without it PR-AUC falls from 0.315 to 0.263, and alone it reaches 0.206, two and a half times the
+bucket rate. Second is the history of the game: a player who has just erred, or whose opponent has just
+erred, is more likely to blunder, and these twelve features alone beat every other group but the engine.
+The evaluation matters a lot when shuffled (34\,\%) but little when left out, because the engine's win
+probability of the best move says nearly the same; the two groups stand in for each other. Clock, game and
+rating add almost nothing once the rest is known (PR-AUC 0.313 without either clock or game), although
+the blunder rate clearly depends on the time left (Figure~\ref{fig:rates}). Time pressure is real, but
+for a single move what the position demands and how the game has gone say more than the clock. Rating
+alone is even worse than the bucket rate, which knows speed and time left as well.
+\textbf{The readable tree.} A tree of depth 4 on the engine features (16 leaves) shows the same order in
+rules. Its first split is whether the opponent's last move lost at least 19 points of win probability.
+If it did, and the opponent had blundered before and the best move stands out clearly from the second
+best, 35.5\,\% of the moves are blunders (384,000 training moves), six times the average. Many of these
+are missed chances: after an opponent's blunder only the move that punishes it keeps the advantage, and
+any other move gives it back and counts as a blunder itself. On the other side, a calm game (the opponent
+did not just err, fewer than 60\,\% of the legal moves lose 15 points, no own error in the last six moves
+and never more than 5 points lost in the game) has a rate of 0.35\,\% over 3.4 million moves. Where most
+moves lose and the mover has blundered before, the rate is 11 to 17\,\%. Neither the clock nor the rating
+appears in the top four levels, as in the ablation. \textbf{Errors.} At its cut-off (0.19, chosen on the validation moves) the best run flags 8.1\,\% of the
+test moves and catches 46.7\,\% of the blunders; 31.6\,\% of the flagged moves are blunders. The missed
+blunders are the ``blunders out of nowhere'': compared with the caught ones they come earlier in the game
+(move 22 against 24 on average), with more time left (57\,\% against 51\,\% of the game's time), in more
+even positions (win probability 0.55 against 0.64), from stronger players (1,594 against 1,474), and
+after quiet moves (the opponent's last move lost 5 points on average, against 22 before a caught
+blunder). Recall is lowest in the first ten moves (36\,\%) and for players rated 2,000 and above
+(37\,\%). The false alarms look like the caught blunders: tense positions right after an error. There a
+blunder was likely and did not happen, which no model of the situation before the move can tell apart.
+
+\textbf{Robustness (goal 3).} The lead over the bucket rate holds in every subgroup we looked at: every
+speed, every rating band, every game phase, every band of time left and of the position. The best run's
+log loss is 18 to 33\,\% below the baseline's in all of them (58\,\% in clearly lost positions, where
+blunders are rare and the engine sees that little is left to lose), and its PR-AUC is between 0.28 and 0.46
+where the baseline's is between 0.02 and 0.15 (Figure~\ref{fig:curves}).
+
+\section{Comparison with Earlier Work}
+
+The closest work, \citet{anderson2017error}, predicted from online games whether a player errs in a
+position from the player's skill, the time left and the difficulty of the position, and found the
+difficulty the strongest of the three. Our engine features measure this difficulty (how many moves lose),
+so our ablation repeats their comparison on recent data, with the game's history added. We agree:
+the difficulty of the position is the strongest signal, far ahead of rating and time left, and the course
+of the game, which they did not use, comes second. The Maia models \cite{mcilroyyoung2020maia,tang2024maia2} predict \emph{which} move a human plays,
+from the board, with a deep network; a blunder probability could be derived from them, but their scores
+are not comparable to ours. We found no published scores for the same task, so the bucket rate remains
+our yardstick.
+
+% ======================================================================================================
+% Checklist: result critically evaluated, compared with the baselines, what it means for the problem.
+\chapter{Results}
+\label{ch:results}
+
+Yes, a blunder can be foreseen in part before the move is played. On 69,998 unseen games, XGBoost with
+our engine features reaches a PR-AUC of 0.321 against 0.082 for the blunder rate per speed, rating and
+time left, and a log loss a quarter lower (0.1545 against 0.2062). In practice: among the 5\,\% of moves it
+rates riskiest, 37\,\% are blunders, against 5.5\,\% overall, and these moves hold a third of all blunders
+(goal~1). The signal lies in the position and the course of the game, not in the clock: how many moves lose
+in the position is the strongest group, what happened in the last moves the second, while time left and
+rating add little once these are known. The readable tree says the same in rules: right after an opponent's
+blunder, in a sharp position, a third of the moves are blunders, often missed chances to punish it, while in
+a calm game hardly any are (goal~2). The lead over the baseline holds in every speed, rating band, game
+phase and band of time left (goal~3). Balancing the training games towards the month's blunder rates changed
+no model; a stratified random draw is enough (goal~4).
+
+\textbf{Limitations.} Only analysed games have labels, and players do not analyse games at random (a lost
+game, a memorable error), so our rates may differ from those of all games. The labels come from Lichess's
+server analysis, our engine features from a shallower search. One month cannot show changes over time,
+and the same players occur in training and test games, so a model may partly learn their habits; a split
+by player would test this.
+
+\textbf{Use.} A risk with a lift of 6.8 ranks the dangerous moments of a game well: a broadcast could show
+viewers when a position is a trap for the humans at the board, and a training tool could show a player the
+kind of moment in which they tend to blunder, such as the move after the opponent's mistake. It is no
+reliable warning before every single blunder: at its cut-off the model catches 47\,\% of the blunders, and
+two of three flagged moves are fine. Half of the blunders come ``out of nowhere'', in quiet positions, and
+no model of the situation before the move will see them.
+
+\bibliography{references}
+
+\end{document}
