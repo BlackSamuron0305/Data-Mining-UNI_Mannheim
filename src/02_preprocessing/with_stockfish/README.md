@@ -15,5 +15,5 @@ To download it on its own: `uv run python -m src.common.server download stockfis
 
     uv run python -m src.02_preprocessing.with_stockfish.engine
 
-It writes one file per 50 games into `data/preprocessing/<selection>/with_stockfish/stockfish/<part>/` and continues where it
+It writes one file per 50 games into `data/02_preprocessing/<selection>/with_stockfish/stockfish/<part>/` and continues where it
 stopped. Settings: `engine:` in `config.yaml`.

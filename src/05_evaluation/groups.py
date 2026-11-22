@@ -1,6 +1,6 @@
 """Subgroups of the moves (speed, Elo band, move number, time left, win probability) for validate.py and errors.py.
 
-The columns come from data/preprocessing/<selection>/without_stockfish/final/<train|test>.parquet; the bands are set in config.yaml (evaluation).
+The columns come from data/02_preprocessing/<selection>/without_stockfish/final/<train|test>.parquet; the bands are set in config.yaml (evaluation).
 """
 from __future__ import annotations
 

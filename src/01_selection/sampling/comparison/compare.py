@@ -7,10 +7,10 @@ import pandas as pd
 
 from src.config import (BLUNDER_RATES_DIR, CFG, COMPARISON_DIR, LOGS_SUB, SEED, SELECTION_ROOT, SELECTIONS,
                         TABLES_SUB, setup_log)
-from ..preparation.blunder_rates.intervals import add_rates
-from ..preparation.blunder_rates.rates import by_time_left
-from ..sampling.common.pool import Pool
-from ..sampling.common.split import draw_stratified, test_part
+from ...preparation.blunder_rates.intervals import add_rates
+from ...preparation.blunder_rates.rates import by_time_left
+from ..common.pool import Pool
+from ..common.split import draw_stratified, test_part
 
 log = logging.getLogger("comparison")
 PARTS = ("train", "test")

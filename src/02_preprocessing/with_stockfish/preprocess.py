@@ -1,7 +1,7 @@
 """Add the Stockfish columns to the moves without false predictors.
 
 Usage:  uv run python -m src.02_preprocessing.with_stockfish.preprocess   (after without_stockfish/preprocess.py)
-Output: data/preprocessing/<selection>/with_stockfish/clean/train.parquet, test.parquet
+Output: data/02_preprocessing/<selection>/with_stockfish/clean/train.parquet, test.parquet
 
 If the Stockfish files are not on this computer, they are downloaded from the team's server (needs .env),
 unless IE500_SOURCE=scratch.
@@ -11,15 +11,20 @@ import logging
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from src.config import setup_log
+from src.config import PREPROCESSING_ROOT, SELECTIONS, setup_log
 from src.common.server import fetch
-from ..common.paths import KEYS, PARTS, STOCKFISH_DIR, WITH_DIR, WITHOUT_DIR
+from ..common.paths import KEYS, PARTS, PRE_DIR, STOCKFISH_DIR, WITH_DIR, WITHOUT_DIR
 
 log = logging.getLogger("with_stockfish")
 
 
+# Stockfish files of the part from every selection; the join below keeps only the moves of this one
 def stockfish_files(part: str) -> list:
-    return sorted((STOCKFISH_DIR / part).glob("*.parquet"))
+    files = []
+    for selection in SELECTIONS:
+        folder = PREPROCESSING_ROOT / selection / STOCKFISH_DIR.relative_to(PRE_DIR) / part
+        files += sorted(folder.glob("*.parquet"))
+    return files
 
 
 def stockfish_table(part: str) -> pa.Table:

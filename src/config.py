@@ -12,24 +12,28 @@ ROOT = Path(__file__).resolve().parents[1]
 CFG: dict = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
 SEED: int = CFG["seed"]
 WORKERS: int = int(os.environ.get("IE500_WORKERS") or min(CFG["workers"], os.cpu_count() or 1))
-MONTH: str = CFG["source"]["month"]
+# IE500_MONTH picks another month for the download, the cleanup and the blunder rates, e.g. 2026-08
+MONTH: str = os.environ.get("IE500_MONTH") or CFG["source"]["month"]
+MONTH_NAMES = {"2026-08": "august", "2026-09": "september"}
 
-# IE500_CACHE points cache/ elsewhere; IE500_SELECTION picks the selection that the later steps use, and
-# preprocessing, runs and validation each get a folder per selection
+# data/ has one folder per step of src/; IE500_SELECTION picks the selection that the steps after the
+# selection use, and each of them has a folder per selection
 DATA = ROOT / "data"
-CACHE = Path(os.environ.get("IE500_CACHE") or ROOT / "cache")
-CLEANUP_DIR = CACHE / "cleanup"
-BLUNDER_RATES_DIR = DATA / "blunder_rates"
-SELECTIONS = ["random", "stratified", "balanced"]
+RAW_ROOT = DATA / "01_selection" / "raw"
+CLEANUP_DIR = DATA / "01_selection" / "preparation" / "cleanup" / MONTH_NAMES[MONTH]
+BLUNDER_RATES_DIR = DATA / "01_selection" / "preparation" / "blunder_rates" / MONTH_NAMES[MONTH]
+SELECTIONS = ["random", "stratified", "stratified_balanced"]
 SELECTION = os.environ.get("IE500_SELECTION") or "stratified"
-SELECTION_ROOT = DATA / "selection"
+SELECTION_ROOT = DATA / "01_selection" / "sampling"
 SELECTION_DIR = SELECTION_ROOT / SELECTION
 COMPARISON_DIR = SELECTION_ROOT / "comparison"
-PREPROCESSING_DIR = DATA / "preprocessing" / SELECTION
+PREPROCESSING_ROOT = DATA / "02_preprocessing"
+PREPROCESSING_DIR = PREPROCESSING_ROOT / SELECTION
 FINAL_DIRS = {"without_stockfish": PREPROCESSING_DIR / "without_stockfish" / "final",
               "with_stockfish": PREPROCESSING_DIR / "with_stockfish" / "final"}
-RUNS_DIR = DATA / "runs" / SELECTION
-VALIDATION_DIR = DATA / "validation" / SELECTION
+RUNS_ROOT = DATA / "04_data_mining"
+RUNS_DIR = RUNS_ROOT / SELECTION
+VALIDATION_DIR = DATA / "05_evaluation" / SELECTION
 GAMES_SUB = "games"
 TABLES_SUB = "tables"
 LOGS_SUB = "logs"

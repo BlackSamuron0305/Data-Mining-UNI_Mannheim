@@ -1,7 +1,7 @@
 """Inspect the columns of the moves without Stockfish (training games only).
 
 Usage:  uv run python -m src.02_preprocessing.without_stockfish.inspection   (after preprocess.py)
-Output: data/preprocessing/<selection>/without_stockfish/inspection/; look at it in report.ipynb
+Output: data/02_preprocessing/<selection>/without_stockfish/inspection/; look at it in report.ipynb
 """
 from ..common.inspection import inspect_table
 from ..common.paths import WITHOUT_DIR

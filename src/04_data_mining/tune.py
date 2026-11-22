@@ -14,7 +14,7 @@ import time
 
 import pandas as pd
 
-from src.config import DATA, SEED
+from src.config import RUNS_ROOT, SEED
 from src.common.buckets import uniform
 from src.common.metrics import scores
 from .common import (FEATURE_SETS, TRAIN, TUNING, cap_moves, columns, folds, load, predictions, run_dir,
@@ -188,7 +188,7 @@ def main():
 
     fit_df, valid = folds(load("train", args.features, args.max_games))
     if args.params_from:
-        run_folder = DATA / "runs" / args.params_from / args.method / name
+        run_folder = RUNS_ROOT / args.params_from / args.method / name
         best = json.loads((run_folder / "run.json").read_text(encoding="utf-8"))["params"]
         table = pd.DataFrame()
         print(f"{args.method} on {args.features}: settings of {run_folder}: {best}")

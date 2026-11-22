@@ -8,7 +8,7 @@ source:
   # come from .env (a copy of .env.example).
   month: "2026-09"
   key: lichess_db_standard_rated_{month}.pgn.zst
-  local_dir: null            # folder with the same files on this computer (null: cache/raw/), read instead of S3 if
+  local_dir: null            # folder with the same files on this computer (null: data/01_selection/raw/<month>/), read instead of S3 if
                              # the file is there; LICHESS_LOCAL_DIR (or .env) overrides it. The download scripts of
                              # src/01_selection/ put the files there
 

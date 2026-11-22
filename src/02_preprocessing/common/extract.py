@@ -4,7 +4,7 @@ This includes the columns that are only known after the move or after the game (
 removed in the next step, so that the removal is visible.
 
 Usage:  uv run python -m src.02_preprocessing.common.extract [train|test ...]
-Output: data/preprocessing/<selection>/extracted/train.parquet, test.parquet, extract.json
+Output: data/02_preprocessing/<selection>/extracted/train.parquet, test.parquet, extract.json
 """
 from __future__ import annotations
 

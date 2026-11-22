@@ -1,6 +1,6 @@
 #!/bin/bash
-# All training runs of the paper and their validation, for run A (stratified) and run B (balanced).
-# A step whose result is already there is skipped. Logs: data/runs/<selection>/logs/<step>.log
+# All training runs of the paper and their validation, for run A (stratified) and run B (stratified_balanced).
+# A step whose result is already there is skipped. Logs: data/04_data_mining/<selection>/logs/<step>.log
 #
 #   bash run_models.sh
 #   PY=".venv/Scripts/python.exe" bash run_models.sh
@@ -13,7 +13,7 @@ step() {
   local name=$1
   local done=$2
   shift 2
-  local runs="data/runs/$IE500_SELECTION"
+  local runs="data/04_data_mining/$IE500_SELECTION"
   if [ -n "$done" ] && [ -e "$runs/$done" ]; then
     echo "$(date '+%F %T') skip $name ($IE500_SELECTION)"
     return
@@ -27,7 +27,7 @@ step() {
 }
 
 models() {
-  local runs="data/runs/$IE500_SELECTION"
+  local runs="data/04_data_mining/$IE500_SELECTION"
   step bucket_rate_month bucket_rate/month/run.json $PY -m src.04_data_mining.bucket_rate.train --source month
   step bucket_rate_train bucket_rate/train/run.json $PY -m src.04_data_mining.bucket_rate.train --source train
   step baselines baseline/.done sh -c "$PY -m src.04_data_mining.baseline.train && touch $runs/baseline/.done"
@@ -47,14 +47,14 @@ export IE500_SELECTION=stratified
 models
 step tree_rules decision_tree/engine_depth4/run.json $PY -m src.04_data_mining.decision_tree.train --features engine --depths 4 --name engine_depth4
 for f in context engine; do
-  step "ablation_xgboost_$f" "ablation/.done_xgboost_$f" sh -c "$PY -m src.04_data_mining.ablation --method xgboost --features $f && mkdir -p data/runs/stratified/ablation && touch data/runs/stratified/ablation/.done_xgboost_$f"
+  step "ablation_xgboost_$f" "ablation/.done_xgboost_$f" sh -c "$PY -m src.04_data_mining.ablation --method xgboost --features $f && mkdir -p data/04_data_mining/stratified/ablation && touch data/04_data_mining/stratified/ablation/.done_xgboost_$f"
 done
 step validate "" $PY -m src.05_evaluation.validate
 step importance "" $PY -m src.04_data_mining.importance
 
 # run B: balanced training games with the settings of run A
-export IE500_SELECTION=balanced
+export IE500_SELECTION=stratified_balanced
 models --params-from stratified --cv 0
 export IE500_SELECTION=stratified
-step validate_with_balanced "" $PY -m src.05_evaluation.validate --with balanced
+step validate_with_balanced "" $PY -m src.05_evaluation.validate --with stratified_balanced
 echo "$(date '+%F %T') all done"

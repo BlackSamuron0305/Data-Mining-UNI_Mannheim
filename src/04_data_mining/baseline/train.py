@@ -3,7 +3,7 @@
 Usage:  uv run python -m src.04_data_mining.baseline.train [--rules overall speed speed_elo eval_wp opp_erred]
             [--max-games N]
 
-Each group's rate is pulled towards its parent's rate by SHRINK moves; writes data/runs/baseline/<rule>/.
+Each group's rate is pulled towards its parent's rate by SHRINK moves; writes data/04_data_mining/<selection>/baseline/<rule>/.
 """
 import argparse
 import time

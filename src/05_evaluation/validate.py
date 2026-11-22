@@ -2,8 +2,8 @@
 
 Usage:  uv run python -m src.05_evaluation.validate [--with SELECTION ...] [--best RUN] [--bootstrap N]
 
-Scores every run in data/runs/<selection>/ on its own moves and on the moves that every run predicted, against the baseline
-bucket_rate/month, and writes the tables, intervals, figures and error analysis to data/validation/<selection>/.
+Scores every run in data/04_data_mining/<selection>/ on its own moves and on the moves that every run predicted, against the baseline
+bucket_rate/month, and writes the tables, intervals, figures and error analysis to data/05_evaluation/<selection>/.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import average_precision_score
 
-from src.config import CFG, DATA, GAMES_SUB, RUNS_DIR, SELECTION, SELECTION_DIR, SELECTION_ROOT, VALIDATION_DIR
+from src.config import CFG, GAMES_SUB, RUNS_DIR, RUNS_ROOT, SELECTION, SELECTION_DIR, SELECTION_ROOT, VALIDATION_DIR
 from src.config import KEYS, TARGET
 from src.common.metrics import best_cutoff, calibration, decisions, move_loss, scores, top_name
 from . import bootstrap, errors, figures
@@ -59,7 +59,7 @@ def other_runs(specs: list[str]) -> dict[str, dict]:
         if theirs != mine:
             raise ValueError(f"{label} has other test games than {SELECTION} ({len(theirs ^ mine):,} differ): the "
                              "runs cannot be compared.")
-        runs_dir = DATA / "runs" / label
+        runs_dir = RUNS_ROOT / label
         runs = find_runs(runs_dir, label)
         if not runs:
             raise FileNotFoundError(f"no runs in {runs_dir}")
@@ -223,7 +223,7 @@ def interval_table(iv: pd.DataFrame, order: list[str]) -> list[str]:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--with", dest="others", action="append", default=[], metavar="SELECTION",
-                    help="also score the runs of another selection, e.g. balanced (test part only)")
+                    help="also score the runs of another selection, e.g. stratified_balanced (test part only)")
     ap.add_argument("--best", metavar="RUN", help="the run of the error analysis, e.g. gradient_boosting/context "
                     "(default: the lowest valid log loss)")
     ap.add_argument("--bootstrap", type=int, metavar="N", help=f"resamples of the test games for the intervals "

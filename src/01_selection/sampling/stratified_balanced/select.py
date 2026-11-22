@@ -11,7 +11,7 @@ from ..common.weights import chance_by_group
 from ..common.write import folder, make_games, write_selection
 from .swap import balance
 
-NAME = "balanced"
+NAME = "stratified_balanced"
 N = CFG["selection"]["n_games"]
 log = logging.getLogger(NAME)
 

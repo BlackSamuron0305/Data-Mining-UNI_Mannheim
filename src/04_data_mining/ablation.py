@@ -4,7 +4,7 @@ Usage:  uv run python -m src.04_data_mining.ablation [--method xgboost|gradient_
             [--max-games N]
 
 Uses the settings of the tuned run <method>/<features>_tuned if it exists, else the defaults, and writes
-data/runs/<selection>/ablation/<method>_<features>_<variant>/.
+data/04_data_mining/<selection>/ablation/<method>_<features>_<variant>/.
 """
 import argparse
 import json

@@ -15,7 +15,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from urllib3.exceptions import HTTPError
 
-from src.config import CFG, ROOT, SOURCE, env, s3_settings
+from src.config import CFG, MONTH_NAMES, RAW_ROOT, ROOT, SOURCE, env, s3_settings
 
 log = logging.getLogger("storage")
 ZSTD_MAGIC = 0xFD2FB528
@@ -31,9 +31,12 @@ def month_key(month: str) -> str:
     return CFG["source"]["key"].format(month=month)
 
 
-# Folder for the raw months on this computer
-def local_dir() -> Path:
-    folder = Path(env("LICHESS_LOCAL_DIR") or CFG["source"].get("local_dir") or "cache/raw")
+# Folder for a raw month on this computer: data/01_selection/raw/<month>/, or LICHESS_LOCAL_DIR if set
+def local_dir(month: str) -> Path:
+    other = env("LICHESS_LOCAL_DIR") or CFG["source"].get("local_dir")
+    if not other:
+        return RAW_ROOT / MONTH_NAMES[month]
+    folder = Path(other)
     if not folder.is_absolute():
         folder = ROOT / folder
     return folder
@@ -41,7 +44,7 @@ def local_dir() -> Path:
 
 # The raw month on this computer, or None
 def local_file(month: str) -> Path | None:
-    path = local_dir() / month_key(month)
+    path = local_dir(month) / month_key(month)
     if path.is_file():
         return path
     return None
@@ -90,7 +93,7 @@ def check_sha256(name: str, dst: Path) -> None:
 # Download a raw month: from our server, or from Lichess with IE500_SOURCE=scratch
 def download(month: str) -> Path:
     name = month_key(month)
-    dst = local_dir() / name
+    dst = local_dir(month) / name
     dst.parent.mkdir(parents=True, exist_ok=True)
     if SOURCE == "scratch":
         if dst.is_file():

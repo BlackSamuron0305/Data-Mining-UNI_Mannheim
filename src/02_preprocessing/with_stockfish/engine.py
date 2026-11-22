@@ -2,8 +2,8 @@
 on 16 cores; the default is to download our results instead (README.md).
 
 Usage:  uv run python -m src.02_preprocessing.with_stockfish.engine [train|test ...]
-Output: data/preprocessing/<selection>/with_stockfish/stockfish/<part>/NNNNN.parquet (one file per batch of games), engine.json
-IE500_SHARD="i/n" does only every n-th batch file; IE500_ENGINE_REUSE=<selection> reuses that selection's files.
+Output: data/02_preprocessing/<selection>/with_stockfish/stockfish/<part>/NNNNN.parquet (one file per batch of games), engine.json
+IE500_SHARD="i/n" does only every n-th batch file. Games another selection already analysed are skipped.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import chess.engine
 import numpy as np
 import pandas as pd
 
-from src.config import CFG, DATA, env, GAMES_SUB, LOGS_SUB, SELECTION_DIR, WORKERS, setup_log
+from src.config import CFG, PREPROCESSING_ROOT, env, GAMES_SUB, LOGS_SUB, SELECTION_DIR, SELECTIONS, WORKERS, setup_log
 from src.common.pgn import capped_cp, iter_pgn, read_game, win_prob
 from src.common.buckets import uniform
 from ..common.paths import PRE_DIR, STOCKFISH_DIR
@@ -191,27 +191,26 @@ def jobs(part: str, out_dir: Path, keep: set[str]):
         yield str(out), tuple(batch)
 
 
-def reuse(part: str, out_dir: Path, name: str) -> set[str]:
-    """IE500_ENGINE_REUSE=<selection>: copy in that selection's engine files of the part (same engine and
-    settings) as reuse_NNNNN.parquet and return their games, which are then not analysed again."""
-    src = os.environ.get("IE500_ENGINE_REUSE")
-    if not src:
-        return set()
-    src_dir = DATA / "preprocessing" / src / STOCKFISH_DIR.relative_to(PRE_DIR) / part
-    if src_dir.resolve() == out_dir.resolve():
-        return set()
-    meta = json.loads((src_dir / "engine.json").read_text(encoding="utf-8"))
-    same_settings = {k: meta.get(k) for k in settings()} == settings()
-    if meta.get("engine") != name or not same_settings:
-        raise RuntimeError(f"{src_dir} was made with another engine or other settings; it cannot be reused")
+# Games of the part that another selection already analysed with the same engine and settings
+def done_elsewhere(part: str, name: str) -> set[str]:
     games = set()
-    files = sorted(src_dir.glob("[0-9]*.parquet"))
-    for f in files:
-        dst = out_dir / f"reuse_{f.name}"
-        if not dst.exists():
-            shutil.copyfile(f, dst)
-        games.update(pd.read_parquet(f, columns=["game_id"])["game_id"].unique())
-    log.info("%s: reused %d files with %s games from %s", part, len(files), f"{len(games):,}", src_dir)
+    for selection in SELECTIONS:
+        folder = PREPROCESSING_ROOT / selection / STOCKFISH_DIR.relative_to(PRE_DIR)
+        if folder.resolve() == STOCKFISH_DIR.resolve():
+            continue
+        meta_path = folder / part / "engine.json"
+        if not meta_path.exists():
+            meta_path = folder / "engine.json"
+        if not meta_path.exists():
+            continue
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        if meta.get("engine") != name or {k: meta.get(k) for k in settings()} != settings():
+            log.info("%s: %s used another engine or other settings, not reused", part, folder)
+            continue
+        for f in sorted((folder / part).glob("*.parquet")):
+            games.update(pd.read_parquet(f, columns=["game_id"])["game_id"].unique())
+    if games:
+        log.info("%s: %s games already analysed by another selection, skipped", part, f"{len(games):,}")
     return games
 
 
@@ -223,7 +222,7 @@ def run_part(part: str) -> None:
     eng = open_engine()
     name = eng.id.get("name", "?")
     eng.quit()
-    keep = chosen_games(part) - reuse(part, out_dir, name)
+    keep = chosen_games(part) - done_elsewhere(part, name)
 
     meta_path = out_dir / "engine.json"
     meta = {"engine": name, "part": part, "games": len(keep), **settings()}

@@ -113,7 +113,7 @@ def summary(name: str, pool, g: pd.DataFrame, n: dict, moves: dict, rate: dict, 
     return "\n".join(lines) + "\n"
 
 
-# Write games, tables and summary into data/selection/<name>/
+# Write games, tables and summary into data/01_selection/sampling/<name>/
 def write_selection(name: str, pool, games: pd.DataFrame, part_ids: dict, balance: dict | None,
                     seconds: float) -> None:
     out = SELECTION_ROOT / name

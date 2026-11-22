@@ -1,7 +1,7 @@
 """Remove the columns we do not need, each with its reason (see report.ipynb).
 
 Usage:  uv run python -m src.02_preprocessing.without_stockfish.reduce   (after inspection.py)
-Output: data/preprocessing/<selection>/without_stockfish/final/train.parquet, test.parquet, removed.csv
+Output: data/02_preprocessing/<selection>/without_stockfish/final/train.parquet, test.parquet, removed.csv
 """
 from ..common.paths import WITHOUT_DIR
 from ..common.reduction import reduce_tables
