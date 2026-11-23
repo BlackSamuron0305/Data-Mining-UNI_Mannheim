@@ -1,4 +1,4 @@
-# Which games of the month we keep
+"""Which games of the month are complete cases (the filters are in src/settings.py), and what is read from them."""
 import io
 import re
 from collections import Counter
@@ -23,6 +23,11 @@ class Game(NamedTuple):
     black_elo: int
     clk: np.ndarray
     blunder: np.ndarray
+
+
+# True if the cleanup described by its cleanup.json used the filters of src/settings.py
+def same_filters(meta: dict) -> bool:
+    return meta.get("filters") == FILTERS
 
 
 # Split the text into single games
@@ -62,7 +67,8 @@ def complete_game(pgn: str, funnel: Counter) -> Game | None:
     if game is None or game.errors:
         return None
     nodes = list(game.mainline())
-    if len(nodes) < FILTERS["min_plies"]:
+    # every length counts, also an early resignation; a game without a move has nothing to predict
+    if not nodes:
         return None
     funnel[("passes filters", speed)] += 1
 

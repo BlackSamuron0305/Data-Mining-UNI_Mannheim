@@ -1,4 +1,5 @@
-# Chance of every selected game to be picked, and its weight
+"""The chance of every selected game to be picked, and its weight (1 / chance), to estimate the month's numbers
+from a selection."""
 import pandas as pd
 
 

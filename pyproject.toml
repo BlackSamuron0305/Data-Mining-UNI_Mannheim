@@ -22,4 +22,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ipykernel>=7.4.0",
+    "pytest>=9.2.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

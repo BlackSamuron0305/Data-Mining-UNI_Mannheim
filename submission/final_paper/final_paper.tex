@@ -193,9 +193,10 @@ names would let a model memorise players instead of situations; the date says no
 
 \textbf{Quality and target.} Clocks are recorded in almost every game, but evaluations and marks only in
 analysed games, about 10\,\% of the month; a game without them has no label and is dropped, not
-imputed. Of the 580 million moves of the complete games, 5.51\,\% are blunders, so never predicting
-one is right on 94.5\,\% of the moves. Blunders are not spread evenly (Figure~\ref{fig:rates}). In a
-first sample of 945,171 moves the rate was 7.8\,\% below a rating of 1,200 and 3.9\,\% from 2,000 on,
+imputed. Of the 580 million moves of the complete games, 5.51\,\% are blunders (August 2026: \tbd\,\%, a
+monthly bias), so never predicting one is right on 94.5\,\% of the moves. Blunders are not spread evenly
+(Figure~\ref{fig:rates}). In a first sample of 945,171 moves the rate was 7.8\,\% below a rating of 1,200
+and 3.9\,\% from 2,000 on,
 8.2\,\% with less than a twentieth of the time left and 4.8\,\% with more than half, and 27.7\,\% right
 after the opponent lost 20 points of win probability, against 4.3\,\% otherwise. These correlations are
 what the features and the baseline build on.
@@ -272,19 +273,19 @@ We discussed three designs (Table~\ref{tab:designs}).
     Fully random & nothing: every complete game has the same chance & shares of rare groups (e.g.\
       classical above 2,000) vary by chance & yardstick \\
     Stratified random & the share of every group, exactly as in the month; random inside a group & only
-      chance inside the groups & run A \\
+      chance inside the groups & stratified run \\
     Stratified + balanced & also the blunder rate of all 756 buckets, by swapping games until it
-      equals the month's & games are chosen by their label & run B \\
+      equals the month's & games are chosen by their label & balanced run \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
 A \textbf{fully random} draw gives every group its share on average; stratification with proportional
 allocation gives it exactly and removes the chance variation of the shares \cite{cochran1977sampling},
-so it can only be closer to the month. \textbf{Stratified random} (run A) gives every group its share of
+so it can only be closer to the month. \textbf{Stratified random} (\emph{stratified run}) gives every group its share of
 the month's complete games, rounded by largest remainders, and draws at random inside.
 
-\textbf{Stratified and balanced} (run B) was our longest discussion. A random draw matches the month in
+\textbf{Stratified and balanced} (\emph{balanced run}) was our longest discussion. A random draw matches the month in
 every bucket only up to chance. The balancing swaps single games for other random games of the same
 group, again and again, until the blunder rate of every bucket equals the month's while each bucket's
 share of moves stays the month's. \emph{For} it: the models learn from a sample whose blunder rates are
@@ -293,17 +294,17 @@ chooses games by their label. To lower a bucket's rate it drops games with blund
 without, and these are not random games but calmer ones, with fewer earlier errors and simpler positions;
 the 756 rates we watch are fixed, every relation we do not watch may be bent. And balanced test games
 would favour the baseline, which predicts exactly the month's bucket rates. We settle this by experiment:
-run B balances only the \emph{training} games. The draw and split do not depend on the balancing, so runs
-A and B have the same 69,998 test games, and every model is fitted on both and scored on these
+only the \emph{training} games are balanced. The draw and split do not depend on the balancing,
+so both runs have the same 69,998 test games, and every model is fitted on both and scored on these
 (Section~\ref{sec:balancing}).
 
-Whether run A is as close to the month as chance allows, we test with the deviation of every bucket
+Whether the stratified run is as close to the month as chance allows, we test with the deviation of every bucket
 $b$, $z_b = (k_b - p_b m_b)/\sqrt{p_b(1-p_b)m_b}$ for $m_b$ moves, $k_b$ blunders and the month's rate
 $p_b$, summed as $\chi^2 = \sum_b z_b^2$ and compared with 20 fresh random draws of the same design.
-Run A's training part has $\chi^2 = 1{,}034$ over 742 buckets, inside the range of the random draws
+Its training part has $\chi^2 = 1{,}034$ over 742 buckets, inside the range of the random draws
 (877--1,095 between their 5th and 95th percentile; 75\,\% of them lie lower), its test part 968 (896--1,071).
-So run A is as close to the month as a random draw can be, no closer and no further. Run B's training part
-has $\chi^2 = 30$: the balancing swapped 18,352 of the 280,002 training games (6.6\,\%) and removed
+So it is as close to the month as a random draw can be. The balanced run's
+training part has $\chi^2 = 30$: the balancing swapped 18,352 of the 280,002 training games (6.6\,\%) and removed
 practically all deviation. The training part has 280,002 games with 18.7 million moves, the test part
 69,998 games with 4.7 million; blunder rates 5.505\,\% and 5.503\,\%, against 5.505\,\% in the month. A
 fixed 10\,\% of the training games is held out as \emph{validation games} for early stopping and tuning.
@@ -329,6 +330,16 @@ duplicate game ids are checked in the filter. Numeric features are standardised 
 one-hot encoded, fitted on the fitting moves only. We do not bin features for the learners, as trees find
 their own thresholds; the buckets of the baseline are such a binning.
 
+\textbf{Reduction.} Fixed rules on 70,000 training games remove a feature that follows from kept ones (the
+opponent's rating and clock from the mover's and the difference, both sides' material from total and
+difference, the evaluation in pawns from the win probability; start time and increment, which speed and
+the clock share carry), the less informative of two with Spearman $|\rho| \ge 0.9$, and one with less than
+1\,\% of the best feature's mutual information with the target (colour, hour in UTC, kind of event, rating
+gap, check). Speed, the mover's rating and clock stay, as the buckets rest on them, and so do move number
+and total material ($\rho = -0.92$), as one measures the time in the game, the other how simplified the
+position is. \tbd{} features remain; a boosting model on held-out games scores the same without the
+removed ones. The repository lists every removal with its rule and measured numbers.
+
 \section{Stockfish's View of the Choice}
 \label{sec:engine}
 
@@ -341,8 +352,8 @@ one and how much the 2nd to 5th lose against it. The \emph{worst} pass scores ev
 cheap and enough to see that a move hangs the queen: the losses of the five worst moves, the number of
 moves within an inaccuracy of the best, and the share of moves losing at least an inaccuracy, a mistake or
 a blunder (15 features). On one core the passes take 31 and 8\,ms per position; one search of all moves at
-depth 10 took 136\,ms. The 24.4 million positions of both runs (run B's 17,468 new training games
-included) took about 15 hours on one desktop computer with 16 cores. We had prepared the same job for
+depth 10 took 136\,ms. The 24.4 million positions of both runs (17,468 new training games in the balanced one)
+took about 15 hours on one desktop computer with 16 cores. We had prepared the same job for
 four nodes of bwUniCluster~3.0, but its queue would only have started it after the local run had
 finished. The move actually played is never looked at.
 
@@ -603,19 +614,19 @@ moves fairly (ROC-AUC 0.81) but has the worst calibration of all learners (error
 boosting), as expected from its independence assumption; the readable tree of depth 4 (PR-AUC 0.198, lift
 5.3) already beats it.
 
-\section{Balanced or Not: Run A Against Run B}
+\section{Stratified or Balanced Training Games}
 \label{sec:balancing}
 
 \begin{table}[tb]
   \centering\footnotesize
-  \caption{The same methods fitted on stratified random (A) and balanced (B) training games, scored on the
+  \caption{The same methods fitted on stratified (Strat.) and balanced (Bal.) training games, scored on the
     same test games (feature set engine).}
   \label{tab:balancing}
   \begin{tabular}{@{}lrrrrrr@{}}
     \toprule
      & \multicolumn{2}{c}{PR-AUC} & \multicolumn{2}{c}{Log loss} & \multicolumn{2}{c}{Calibration error} \\
     \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(l){6-7}
-    Method & A & B & A & B & A & B \\
+    Method & Strat. & Bal. & Strat. & Bal. & Strat. & Bal. \\
     \midrule
     Naive Bayes & 0.201 & 0.201 & 0.1847 & 0.1847 & 0.0243 & 0.0244 \\
     Logistic regression & 0.235 & 0.236 & 0.1714 & 0.1714 & 0.0027 & 0.0027 \\
@@ -629,10 +640,10 @@ boosting), as expected from its independence assumption; the readable tree of de
   \end{tabular}
 \end{table}
 
-If balancing only removed chance deviations, the models of run B would be at least as good as those of run
-A (Table~\ref{tab:balancing}); if it bent the relations it does not watch, they would be worse, most
+If balancing only removed chance deviations, the balanced run's models would be at least as good as the
+stratified run's (Table~\ref{tab:balancing}); if it bent the relations it does not watch, they would be worse, most
 visibly in calibration within subgroups that cut across the buckets, such as after an opponent's error.
-Neither happened. For all eight methods, with both feature sets, the scores of A and B agree to the third
+Neither happened. For all eight methods, with both feature sets, the scores of the two runs agree to the third
 decimal: PR-AUC differs by at most 0.003 (the network, the method with the most chance in its training),
 log loss by at most 0.0005, both far inside the 95\,\% intervals of a single run (about $\pm$0.0024 in
 PR-AUC). Within the subgroups of speed, rating, phase, time left and position, XGBoost's PR-AUC differs by

@@ -11,7 +11,7 @@ import json
 import time
 
 from src.config import RUNS_DIR
-from .common import TRAIN, TUNING, cap_moves, columns, folds, groups_of, load, predictions, save_run
+from .common import TUNING, cap_moves, columns, folds, groups_of, load, predictions, save_run
 from .tune import method_module
 
 METHOD = "ablation"
@@ -43,7 +43,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--method", choices=["xgboost", "gradient_boosting"], default="xgboost")
     ap.add_argument("--features", choices=["context", "engine"], default="context")
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     args = ap.parse_args()
 
     mod = method_module(args.method)

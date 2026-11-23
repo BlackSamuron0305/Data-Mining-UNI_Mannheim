@@ -24,6 +24,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from src.config import CFG, GAMES_SUB, LOGS_SUB, SELECTION_DIR, WORKERS, setup_log
+from src.common.server import ensure
 from src.common.pgn import CP_CAP, SPEED_RE, capped_cp, iter_pgn, read_game, time_control, win_prob
 from src.common.buckets import SPEEDS, game_group, move_buckets
 from .paths import EXTRACTED_DIR
@@ -41,62 +42,82 @@ PIECE_VALUES = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, 
 MARKS = {chess.pgn.NAG_DUBIOUS_MOVE: 1, chess.pgn.NAG_MISTAKE: 2, chess.pgn.NAG_BLUNDER: 3}
 
 
-# The history helpers get the values of one player's moves (x) and, for every move to predict,
-# how many of those moves came before it (upto). They return one value per move to predict.
-def prefix_mean(x: np.ndarray, upto: np.ndarray, k: int | None = None) -> np.ndarray:
-    """Mean of the earlier values (all, or the last k), NaN skipped."""
-    ok = ~np.isnan(x)
-    sums = np.concatenate(([0.0], np.cumsum(np.where(ok, x, 0.0))))
-    counts = np.concatenate(([0], np.cumsum(ok)))
-    if k is None:
-        start = np.zeros_like(upto)
-    else:
-        start = np.maximum(upto - k, 0)
-    n = counts[upto] - counts[start]
-    return np.where(n > 0, (sums[upto] - sums[start]) / np.maximum(n, 1), np.nan)
+HISTORY = ["own_last_spent", "own_spent_recent", "opp_last_spent", "own_last_loss", "own_loss_mean",
+           "own_loss_recent", "own_loss_max", "own_inaccuracies", "own_mistakes", "own_blunders",
+           "own_moves_since_error", "opp_last_loss", "opp_loss_recent", "opp_mistakes", "opp_blunders"]
 
 
-def recent_mean(x: np.ndarray, upto: np.ndarray) -> np.ndarray:
-    return prefix_mean(x, upto, K)
+def running_mean(sums: list, counts: list, last: int | None = None) -> float:
+    """Mean of a player's values so far (or of the last `last` of them), missing values skipped. sums and counts are
+    running totals (sums[i]: the sum of the first i values), so the mean of the last k values is the total now minus
+    the total k moves ago, divided by the number of values in between."""
+    i = len(sums) - 1
+    start = 0 if last is None else max(i - last, 0)
+    n = counts[i] - counts[start]
+    return (sums[i] - sums[start]) / n if n > 0 else np.nan
 
 
-def prefix_sum(x: np.ndarray, upto: np.ndarray) -> np.ndarray:
-    return np.concatenate(([0.0], np.cumsum(x, dtype=float)))[upto]
+class Player:
+    """What one player has done so far in the game."""
+
+    def __init__(self):
+        self.spent = []              # seconds spent on each of their moves
+        self.loss = []               # win probability lost by each move (NaN without an evaluation)
+        self.spent_sum = [0.0]       # running totals: spent_sum[i] is the time of the first i moves
+        self.spent_count = [0]
+        self.loss_sum = [0.0]        # ... the loss of the first i moves, a missing loss counted as 0
+        self.loss_count = [0]        # ... and how many of them have a loss
+        self.loss_max = np.nan       # the biggest loss so far
+        self.marks = {1: 0.0, 2: 0.0, 3: 0.0}   # inaccuracies (?!), mistakes (?), blunders (??) so far
+        self.last_error = None       # the number of their last move that was a mistake or a blunder
+
+    def add(self, spent: float, loss: float, mark: int) -> None:
+        """Remember one more move of this player."""
+        self.spent.append(spent)
+        self.loss.append(loss)
+        self.spent_sum.append(self.spent_sum[-1] + spent)
+        self.spent_count.append(self.spent_count[-1] + 1)
+        has_loss = not np.isnan(loss)
+        self.loss_sum.append(self.loss_sum[-1] + (loss if has_loss else 0.0))
+        self.loss_count.append(self.loss_count[-1] + int(has_loss))
+        self.loss_max = np.fmax(self.loss_max, loss)
+        if mark in self.marks:
+            self.marks[mark] += 1
+        if mark >= 2:
+            self.last_error = len(self.loss) - 1
 
 
-def prefix_max(x: np.ndarray, upto: np.ndarray) -> np.ndarray:
-    if len(x) == 0:
-        return np.full(len(upto), np.nan)
-    return np.concatenate(([np.nan], np.fmax.accumulate(x)))[upto]
+def last(values: list) -> float:
+    return values[-1] if values else np.nan
 
 
-def last_value(x: np.ndarray, upto: np.ndarray) -> np.ndarray:
-    if len(x) == 0:
-        return np.full(len(upto), np.nan)
-    return np.where(upto > 0, x[np.maximum(upto - 1, 0)], np.nan)
+def history(spent: np.ndarray, loss: np.ndarray, mark: np.ndarray) -> dict[str, np.ndarray]:
+    """What the player to move ("own") and the opponent ("opp") did before every move, one value per ply.
 
-
-def since_last(x: np.ndarray, upto: np.ndarray) -> np.ndarray:
-    """Moves since the last True value (1 = the move just before), NaN if there is none."""
-    if len(x) == 0:
-        return np.full(len(upto), np.nan)
-    last_true = np.maximum.accumulate(np.where(x, np.arange(len(x)), -1))
-    last = np.concatenate(([-1], last_true))[upto]
-    return np.where(last >= 0, upto - last, np.nan)
-
-
-def by_side(x: np.ndarray, fn, opponent: bool = False) -> np.ndarray:
-    """For every ply, fn over the earlier moves of the mover (or of the opponent). x has one value per ply."""
-    n = len(x)
-    out = np.full(n, np.nan)
-    for side in (0, 1):
-        plies = np.arange(side, n, 2)
-        own_before = np.arange(len(plies))
-        if opponent:
-            # White to move has seen as many Black moves as own moves, Black one more White move
-            out[plies] = fn(x[1 - side::2], own_before + side)
-        else:
-            out[plies] = fn(x[side::2], own_before)
+    A plain walk through the game: at every ply we first read off what both players have done so far and only then
+    add the ply to its player, so nothing of the move itself or of a later move can get in."""
+    n = len(mark)
+    out = {name: np.full(n, np.nan) for name in HISTORY}
+    players = (Player(), Player())           # White, Black
+    for t in range(n):
+        own, opp = players[t % 2], players[1 - t % 2]
+        out["own_last_spent"][t] = last(own.spent)
+        out["own_spent_recent"][t] = running_mean(own.spent_sum, own.spent_count, K)
+        out["opp_last_spent"][t] = last(opp.spent)
+        out["own_last_loss"][t] = last(own.loss)
+        out["own_loss_mean"][t] = running_mean(own.loss_sum, own.loss_count)
+        out["own_loss_recent"][t] = running_mean(own.loss_sum, own.loss_count, K)
+        out["own_loss_max"][t] = own.loss_max
+        out["own_inaccuracies"][t] = own.marks[1]
+        out["own_mistakes"][t] = own.marks[2]
+        out["own_blunders"][t] = own.marks[3]
+        if own.last_error is not None:
+            out["own_moves_since_error"][t] = len(own.loss) - own.last_error
+        out["opp_last_loss"][t] = last(opp.loss)
+        out["opp_loss_recent"][t] = running_mean(opp.loss_sum, opp.loss_count, K)
+        out["opp_mistakes"][t] = opp.marks[2]
+        out["opp_blunders"][t] = opp.marks[3]
+        own.add(spent[t], loss[t], int(mark[t]))
     return out
 
 
@@ -181,9 +202,7 @@ def game_features(pgn: str) -> dict[str, np.ndarray] | None:
     opp_elo = np.where(white, black_elo, white_elo)
     mat_own = np.where(white, mat_w, mat_b)
     mat_opp = np.where(white, mat_b, mat_w)
-    inaccuracies = (mark == 1).astype(float)
-    mistakes = (mark == 2).astype(float)
-    blunders = (mark == 3).astype(float)
+    past = history(spent, loss, mark)
     return {
         "game_id": np.full(n, h.get("Site", "").rsplit("/", 1)[-1], dtype=object),
         "ply": t.astype(np.int16),
@@ -205,23 +224,23 @@ def game_features(pgn: str) -> dict[str, np.ndarray] | None:
         "opp_clock": f32(opp_clock),
         "clock_rel": f32(clock / est_duration),
         "clock_diff": f32(clock - opp_clock),
-        "own_last_spent": f32(by_side(spent, last_value)),
-        "own_spent_recent": f32(by_side(spent, recent_mean)),
-        "opp_last_spent": f32(by_side(spent, last_value, opponent=True)),
+        "own_last_spent": f32(past["own_last_spent"]),
+        "own_spent_recent": f32(past["own_spent_recent"]),
+        "opp_last_spent": f32(past["opp_last_spent"]),
         "eval_cp": f32(eval_cp),
         "eval_wp": f32(wp_before),
-        "own_last_loss": f32(by_side(loss, last_value)),
-        "own_loss_mean": f32(by_side(loss, prefix_mean)),
-        "own_loss_recent": f32(by_side(loss, recent_mean)),
-        "own_loss_max": f32(by_side(loss, prefix_max)),
-        "own_inaccuracies": f32(by_side(inaccuracies, prefix_sum)),
-        "own_mistakes": f32(by_side(mistakes, prefix_sum)),
-        "own_blunders": f32(by_side(blunders, prefix_sum)),
-        "own_moves_since_error": f32(by_side(mark >= 2, since_last)),
-        "opp_last_loss": f32(by_side(loss, last_value, opponent=True)),
-        "opp_loss_recent": f32(by_side(loss, recent_mean, opponent=True)),
-        "opp_mistakes": f32(by_side(mistakes, prefix_sum, opponent=True)),
-        "opp_blunders": f32(by_side(blunders, prefix_sum, opponent=True)),
+        "own_last_loss": f32(past["own_last_loss"]),
+        "own_loss_mean": f32(past["own_loss_mean"]),
+        "own_loss_recent": f32(past["own_loss_recent"]),
+        "own_loss_max": f32(past["own_loss_max"]),
+        "own_inaccuracies": f32(past["own_inaccuracies"]),
+        "own_mistakes": f32(past["own_mistakes"]),
+        "own_blunders": f32(past["own_blunders"]),
+        "own_moves_since_error": f32(past["own_moves_since_error"]),
+        "opp_last_loss": f32(past["opp_last_loss"]),
+        "opp_loss_recent": f32(past["opp_loss_recent"]),
+        "opp_mistakes": f32(past["opp_mistakes"]),
+        "opp_blunders": f32(past["opp_blunders"]),
         "legal_moves": legal,
         "in_check": check,
         "material_own": mat_own,
@@ -261,9 +280,7 @@ def features_batch(texts: tuple[str, ...]) -> tuple[pd.DataFrame, int]:
 
 
 def run_part(part: str) -> dict:
-    src = SELECTION_DIR / GAMES_SUB / f"{part}.pgn.zst"
-    if not src.exists():
-        raise FileNotFoundError(f"{src} is missing: run the selection first (README.md)")
+    src = ensure(SELECTION_DIR / GAMES_SUB / f"{part}.pgn.zst", "the selection (src/01_selection/sampling/)")
     out = OUT_DIR / f"{part}.parquet"
     tmp = OUT_DIR / f"{part}.parquet.part"
     t0 = time.time()

@@ -118,7 +118,7 @@
     \node[box, right=of sf] (ml) {\textbf{8 learners}\\ with / without Stockfish};
     \node[box, right=of ml] (eval) {\textbf{Evaluation}\\ same test games};
     \foreach \a/\b in {census/select, select/feat, feat/sf, sf/ml, ml/eval} \draw[arr] (\a) -- (\b);
-    \node[box, below=.9cm of select, draw=good, fill=good!5] (ab) {\textbf{Run A / B}\\ random vs.\ balanced training};
+    \node[box, below=.9cm of select, draw=good, fill=good!5] (ab) {\textbf{Two runs}\\ stratified vs.\ balanced training};
     \node[box, below=.9cm of sf, draw=bad, fill=bad!5] (leak) {\textbf{Leakage check}\\ cut at a random move};
     \node[box, below=.9cm of ml] (tune) {\textbf{Tuning}\\ Optuna, validation games};
     \draw[arr, good] (select) -- (ab); \draw[arr, bad] (sf) -- (leak); \draw[arr, <->] (ml) -- (tune);
@@ -142,7 +142,7 @@
       $\Rightarrow$ yardstick only
     \end{column}
     \begin{column}{.32\textwidth}
-      \hl{Stratified random} \textbf{(run A)}\\[.3em]
+      \hl{Stratified random} \textbf{(stratified run)}\\[.3em]
       \begin{tikzpicture}[scale=.32]
         \foreach \i in {0,...,27} {\pgfmathsetmacro{\h}{0.6+1.6*mod(\i*7,11)/11} \fill[accent!70] (\i*0.32,0) rectangle +(0.24,\h);}
       \end{tikzpicture}\\[.3em]
@@ -150,7 +150,7 @@
       \textcolor{good}{only chance inside the groups}
     \end{column}
     \begin{column}{.32\textwidth}
-      \hl{Stratified + balanced} \textbf{(run B)}\\[.3em]
+      \hl{Stratified + balanced} \textbf{(balanced run)}\\[.3em]
       \begin{tikzpicture}[scale=.32]
         \foreach \i in {0,...,27} {\pgfmathsetmacro{\h}{0.6+1.6*mod(\i*7,11)/11} \fill[good!70] (\i*0.32,0) rectangle +(0.24,\h);}
         \draw[bad, thick, dashed] (0,1.3) -- (9,1.3);
@@ -333,7 +333,7 @@
       \begin{itemize}
         \item 80\,\% training (10\,\% of it: validation games) / 20\,\% test
         \item Moves of one game never on both sides
-        \item Test games used \textbf{once}; runs A and B share them
+        \item Test games used \textbf{once}; both runs share them
       \end{itemize}
       \hl{Why not accuracy?}
       \begin{itemize}
@@ -389,8 +389,8 @@
 \begin{frame}{Balanced or not? And what matters?}
   \begin{columns}[t]
     \begin{column}{.48\textwidth}
-      \hl{Run A vs.\ run B} (same test games)\\[.4em]
-      \open{\linewidth}{3.6cm}{PR-AUC, log loss, calibration:\\ A vs.\ B for 4 methods, with intervals}\\[.3em]
+      \hl{Stratified vs.\ balanced run} (same test games)\\[.4em]
+      \open{\linewidth}{3.6cm}{PR-AUC, log loss, calibration:\\ stratified vs.\ balanced for 4 methods, with intervals}\\[.3em]
       \small\textcolor{red}{Message: \tbd}
     \end{column}
     \begin{column}{.48\textwidth}

@@ -1,16 +1,25 @@
-# Blunder rate of every bucket of the month
+"""Step 1.3: the blunder probability of every bucket of the month, with its 95% interval and the probability the
+baseline predicts (small buckets pulled towards their speed x Elo rate).
+
+Usage:  uv run python -m src.01_selection.preparation.blunder_rates.rates   (after the cleanup; IE500_MONTH for August)
+Output: data/01_selection/preparation/blunder_rates/<month>/: rates.csv, by_time_left.csv, summary.md; figures from
+        plots.ipynb
+"""
 import json
 import logging
+import sys
 
 import numpy as np
 import pandas as pd
 
 from src.config import BLUNDER_RATES_DIR, CLEANUP_DIR, LOGS_SUB, MONTH, setup_log
-from src.common.server import fetch
+from src.common.server import ensure
 from src.common.buckets import SPEEDS, shrunk, time_order
+from ..cleanup.filters import same_filters
 from .intervals import add_rates
 
 log = logging.getLogger("blunder_rates")
+CLEANUP_STEP = "the cleanup (python -m src.01_selection.preparation.cleanup.cleanup)"
 
 
 # Blunder rate of every bucket, with the baseline rate
@@ -41,10 +50,11 @@ def by_time_left(df: pd.DataFrame, cols: dict[str, tuple[str, str]]) -> pd.DataF
 
 
 def run() -> None:
-    meta_path = CLEANUP_DIR / "cleanup.json"
-    if not meta_path.exists():
-        fetch("cleanup", "the cleanup (src/01_selection/preparation/cleanup/cleanup.py)")
+    meta_path = ensure(CLEANUP_DIR / "cleanup.json", CLEANUP_STEP)
+    ensure(CLEANUP_DIR / "buckets.csv", CLEANUP_STEP)
     cleanup = json.loads(meta_path.read_text(encoding="utf-8"))
+    if not same_filters(cleanup):
+        sys.exit(f"{CLEANUP_DIR} was made with other filters than src/settings.py: run {CLEANUP_STEP} again")
     (BLUNDER_RATES_DIR / LOGS_SUB).mkdir(parents=True, exist_ok=True)
     setup_log(BLUNDER_RATES_DIR / LOGS_SUB / "rates.log")
 

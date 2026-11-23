@@ -3,17 +3,18 @@
 Usage:  uv run python -m src.02_preprocessing.with_stockfish.preprocess   (after without_stockfish/preprocess.py)
 Output: data/02_preprocessing/<selection>/with_stockfish/clean/train.parquet, test.parquet
 
-If the Stockfish files are not on this computer, they are downloaded from the team's server (needs .env),
-unless IE500_SOURCE=scratch.
+If the Stockfish files are not on this computer, they are downloaded from our server (data.stockfish: download in
+config.yaml), or engine.py has to compute them first (data.stockfish: compute).
 """
 import logging
+import sys
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from src.config import PREPROCESSING_ROOT, SELECTIONS, setup_log
-from src.common.server import fetch
-from ..common.paths import KEYS, PARTS, PRE_DIR, STOCKFISH_DIR, WITH_DIR, WITHOUT_DIR
+from src.config import KEYS, PREPROCESSING_ROOT, SELECTIONS, STOCKFISH, setup_log
+from src.common.server import download
+from ..common.paths import PARTS, PRE_DIR, STOCKFISH_DIR, WITH_DIR, WITHOUT_DIR
 
 log = logging.getLogger("with_stockfish")
 
@@ -41,7 +42,10 @@ def run() -> None:
     WITH_DIR.mkdir(parents=True, exist_ok=True)
     setup_log(WITH_DIR / "preprocess.log")
     if not all(stockfish_files(part) for part in PARTS):
-        fetch("stockfish", "src/02_preprocessing/with_stockfish/engine.py")
+        if STOCKFISH == "compute":
+            sys.exit("no Stockfish columns yet: run uv run python -m src.02_preprocessing.with_stockfish.engine first")
+        print("no Stockfish columns on this computer: downloading them from our server")
+        download(["stockfish"])
     for part in PARTS:
         src = WITHOUT_DIR / "clean" / f"{part}.parquet"
         if not src.exists():
@@ -49,12 +53,16 @@ def run() -> None:
         moves = pq.read_table(src)
         table = moves.join(stockfish_table(part), keys=KEYS, join_type="left outer")
         table = table.sort_by([("game_id", "ascending"), ("ply", "ascending")])
+        missing = table["sf_wp_best"].null_count
+        if missing:
+            games = len(set(table.filter(table["sf_wp_best"].is_null())["game_id"].to_pylist()))
+            sys.exit(f"{part}: {missing:,} moves of {games:,} games have no Stockfish columns (results of an older "
+                     "selection?): run uv run python -m src.02_preprocessing.with_stockfish.engine, which analyses "
+                     "only the missing games")
         dst = WITH_DIR / "clean" / f"{part}.parquet"
         dst.parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(table, dst, compression="zstd")
-        covered = table.num_rows - table["sf_wp_best"].null_count
-        log.info("%s: %s moves, %s with Stockfish (%.1f%%)", part, f"{table.num_rows:,}", f"{covered:,}",
-                 100 * covered / table.num_rows)
+        log.info("%s: %s moves, all with Stockfish", part, f"{table.num_rows:,}")
 
 
 if __name__ == "__main__":

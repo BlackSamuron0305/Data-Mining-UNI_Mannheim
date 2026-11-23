@@ -1,4 +1,10 @@
-# Compare the three selections with the whole month
+"""Step 1.5: the three selections against the month, bucket by bucket, and fresh stratified draws that show how far
+a selection strays from the month by chance.
+
+Usage:  uv run python -m src.01_selection.sampling.comparison.compare   (after the selections and the blunder rates)
+Output: data/01_selection/sampling/comparison/: summary.md, comparison.json, buckets.csv, by_time_left.csv,
+        weights.csv; figures from report.ipynb
+"""
 import json
 import logging
 

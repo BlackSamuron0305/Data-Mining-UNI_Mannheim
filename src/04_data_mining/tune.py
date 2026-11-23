@@ -17,7 +17,7 @@ import pandas as pd
 from src.config import RUNS_ROOT, SEED
 from src.common.buckets import uniform
 from src.common.metrics import scores
-from .common import (FEATURE_SETS, TRAIN, TUNING, cap_moves, columns, folds, load, predictions, run_dir,
+from .common import (FEATURE_SETS, TUNING, cap_moves, columns, folds, load, predictions, run_dir,
                                  save_run, target)
 
 METHODS = ["naive_bayes", "logistic_regression", "decision_tree", "random_forest", "gradient_boosting", "xgboost",
@@ -174,7 +174,7 @@ def main():
                     help="folds of the check of the best settings (0 = none)")
     ap.add_argument("--params-from", metavar="SELECTION", default=None,
                     help="no trials: refit the settings of the same run of this selection (e.g. stratified)")
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
 

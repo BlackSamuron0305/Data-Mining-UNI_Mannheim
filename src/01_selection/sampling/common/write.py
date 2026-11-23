@@ -1,4 +1,5 @@
-# Write a selection to disk
+"""Write a selection to data/01_selection/sampling/<name>/: the games (PGN and games.csv), the group and bucket
+tables, selection.json and summary.md."""
 import json
 from compression import zstd
 from datetime import datetime, timezone

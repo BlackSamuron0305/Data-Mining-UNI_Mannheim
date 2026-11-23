@@ -10,7 +10,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
 from src.config import SEED
-from ..common import FEATURE_SETS, TRAIN, Fitted, features, fit_and_save, numeric_prep, target
+from ..common import FEATURE_SETS, Fitted, features, fit_and_save, numeric_prep, target
 
 METHOD = "logistic_regression"
 DEFAULTS = {"C": 1.0}
@@ -28,7 +28,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--C", type=float, default=DEFAULTS["C"], help="inverse strength of the L2 penalty")
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
     d, m = fit_and_save(METHOD, fit, args.features, {"C": args.C}, args.max_games, args.name)

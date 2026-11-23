@@ -13,7 +13,7 @@ from sklearn.pipeline import Pipeline
 
 from src.config import SEED
 from src.common.metrics import scores
-from ..common import FEATURE_SETS, TRAIN, Fitted, features, fit_and_save, numeric_prep, target
+from ..common import FEATURE_SETS, Fitted, features, fit_and_save, numeric_prep, target
 
 METHOD = "neural_network"
 DEFAULTS = {"hidden": "64-32", "alpha": 1e-4, "learning_rate": 1e-3, "batch_size": 1024, "max_epochs": 100,
@@ -72,7 +72,7 @@ def main():
     ap.add_argument("--batch-size", type=int, default=DEFAULTS["batch_size"])
     ap.add_argument("--max-epochs", type=int, default=DEFAULTS["max_epochs"])
     ap.add_argument("--patience", type=int, default=DEFAULTS["patience"])
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
     params = {"hidden": "-".join(str(h) for h in args.hidden), "alpha": args.alpha,

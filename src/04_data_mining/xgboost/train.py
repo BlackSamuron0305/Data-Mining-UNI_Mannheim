@@ -9,7 +9,7 @@ import argparse
 import pandas as pd
 
 from src.config import SEED, WORKERS
-from ..common import FEATURE_SETS, TRAIN, Fitted, features, fit_and_save, target
+from ..common import FEATURE_SETS, Fitted, features, fit_and_save, target
 
 METHOD = "xgboost"
 DEFAULTS = {"learning_rate": 0.1, "max_depth": 6, "min_child_weight": 10.0, "reg_lambda": 1.0, "subsample": 0.8,
@@ -26,7 +26,7 @@ def fit(fit_df, valid_df, cols, learning_rate=0.1, max_depth=6, min_child_weight
     from xgboost import XGBClassifier
 
     if not device:
-        device = TRAIN.get("xgboost_device") or "cpu"
+        device = "cpu"
     m = XGBClassifier(n_estimators=max_rounds, learning_rate=learning_rate, max_depth=max_depth,
                       min_child_weight=min_child_weight, reg_lambda=reg_lambda, subsample=subsample,
                       colsample_bytree=colsample_bytree, tree_method="hist", max_bin=256, enable_categorical=True,
@@ -50,8 +50,8 @@ def main():
     ap.add_argument("--colsample-bytree", type=float, default=DEFAULTS["colsample_bytree"],
                     help="share of the features per tree")
     ap.add_argument("--max-rounds", type=int, default=DEFAULTS["max_rounds"])
-    ap.add_argument("--device", default=None, help="cpu or cuda (default: training.xgboost_device)")
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--device", default=None, help="cpu (default) or cuda for an NVIDIA GPU")
+    ap.add_argument("--max-games", type=int, default=None)
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
     params = {"learning_rate": args.learning_rate, "max_depth": args.max_depth,

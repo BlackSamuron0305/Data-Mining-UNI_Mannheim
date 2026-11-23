@@ -9,7 +9,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
 from src.config import SEED, WORKERS
-from ..common import FEATURE_SETS, TRAIN, Fitted, fit_and_save, target, tree_features
+from ..common import FEATURE_SETS, Fitted, fit_and_save, target, tree_features
 
 METHOD = "random_forest"
 DEFAULTS = {"n_estimators": 200, "min_samples_leaf": 200, "max_features": "sqrt", "max_samples": 0.2}
@@ -38,7 +38,7 @@ def main():
     ap.add_argument("--min-samples-leaf", type=int, default=DEFAULTS["min_samples_leaf"])
     ap.add_argument("--max-features", default=DEFAULTS["max_features"], help="sqrt, log2 or a share such as 0.5")
     ap.add_argument("--max-samples", type=float, default=DEFAULTS["max_samples"], help="share of the moves per tree")
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
     params = {"n_estimators": args.n_estimators, "min_samples_leaf": args.min_samples_leaf,

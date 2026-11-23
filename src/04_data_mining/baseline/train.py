@@ -13,7 +13,7 @@ import pandas as pd
 
 from src.config import CFG
 from src.common.buckets import SHRINK, elo_bin, shrunk
-from ..common import TARGET, TRAIN, folds, load, save_run
+from ..common import TARGET, folds, load, save_run
 
 METHOD = "baseline"
 RULES = ["overall", "speed", "speed_elo", "eval_wp", "opp_erred"]
@@ -73,7 +73,7 @@ def predict(df, rule, table, by_parent, overall):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rules", nargs="+", choices=RULES, default=RULES)
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     args = ap.parse_args()
 
     t0 = time.time()

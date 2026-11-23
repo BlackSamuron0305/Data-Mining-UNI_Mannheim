@@ -17,11 +17,13 @@ from sklearn.metrics import average_precision_score
 
 from src.config import CFG, GAMES_SUB, RUNS_DIR, RUNS_ROOT, SELECTION, SELECTION_DIR, SELECTION_ROOT, VALIDATION_DIR
 from src.config import KEYS, TARGET
+from src.common.server import ensure
 from src.common.metrics import best_cutoff, calibration, decisions, move_loss, scores, top_name
 from . import bootstrap, errors, figures
 from .groups import DIMENSIONS, SOURCE, aligned, bands, positions
 
 EV = CFG["evaluation"]
+BOOTSTRAP_BINS = 5000        # steps of the predictions for the PR-AUC of the resamples
 PARTS = ("valid", "test")
 K = EV["top_share"]
 TOP = top_name(K)
@@ -41,9 +43,7 @@ def find_runs(runs_dir: Path = RUNS_DIR, label: str = "") -> dict[str, dict]:
 
 
 def test_games(selection_dir: Path) -> set[str]:
-    path = selection_dir / GAMES_SUB / "games.csv"
-    if not path.exists():
-        raise FileNotFoundError(f"{path} is missing: run the selection first")
+    path = ensure(selection_dir / GAMES_SUB / "games.csv", "the selection (src/01_selection/sampling/)")
     g = pd.read_csv(path, usecols=["game_id", "split"])
     return set(g.loc[g["split"] == "test", "game_id"])
 
@@ -284,7 +284,7 @@ def run(others: list[str] | None = None, best: str | None = None, n_boot: int | 
         preds = {}
         for r in runs:
             preds[r] = common[r].to_numpy()
-        iv = bootstrap.intervals(y, common["game_id"].to_numpy(), preds, base, n_boot, EV["bootstrap_bins"])
+        iv = bootstrap.intervals(y, common["game_id"].to_numpy(), preds, base, n_boot, BOOTSTRAP_BINS)
         iv.to_csv(out_dir / "intervals.csv", index=False)
     sub = None
     if "phase" in common:

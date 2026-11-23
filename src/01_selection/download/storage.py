@@ -1,4 +1,5 @@
-# Download the raw month, or read it piece by piece from this computer or our server
+"""The raw month: download it, or read it frame by frame from this computer or our server (data.raw_from in
+config.yaml). Used by download/september.py, download/august.py and the cleanup."""
 from __future__ import annotations
 
 import hashlib
@@ -7,33 +8,35 @@ import logging
 import time
 import urllib.request
 from collections.abc import Iterator
+from compression import zstd
 from pathlib import Path
 
-import boto3
 from boto3.s3.transfer import TransferConfig
-from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from urllib3.exceptions import HTTPError
 
-from src.config import CFG, MONTH_NAMES, RAW_ROOT, ROOT, SOURCE, env, s3_settings
+from src.common.server import client
+from src.config import MONTH_NAMES, RAW_ROOT, RAW_FROM, ROOT, env
 
 log = logging.getLogger("storage")
-ZSTD_MAGIC = 0xFD2FB528
-SKIPPABLE_MAGIC = 0x184D2A50
+ZSTD_MAGIC = 0xFD2FB528         # the first 4 bytes of every zstd frame
+SKIPPABLE_MAGIC = 0x184D2A50    # ... of a frame without content (the last 4 bits may vary)
+MAX_FRAME = 1 << 28             # Lichess's frames have a few MB; a frame not complete after 256 MB means a damaged file
 RETRIES = 8
 BUFFER = 8 << 20
 DOWNLOAD = TransferConfig(multipart_threshold=64 << 20, multipart_chunksize=64 << 20, max_concurrency=16)
 LICHESS_URL = "https://database.lichess.org/standard/"
+KEY = "lichess_db_standard_rated_{month}.pgn.zst"   # the name of a month's file, at Lichess and on our server
 SHA256_URL = LICHESS_URL + "sha256sums.txt"
 
 
 def month_key(month: str) -> str:
-    return CFG["source"]["key"].format(month=month)
+    return KEY.format(month=month)
 
 
-# Folder for a raw month on this computer: data/01_selection/raw/<month>/, or LICHESS_LOCAL_DIR if set
+# Folder for a raw month on this computer: data/01_selection/raw/<month>/, or LICHESS_LOCAL_DIR (.env) if set
 def local_dir(month: str) -> Path:
-    other = env("LICHESS_LOCAL_DIR") or CFG["source"].get("local_dir")
+    other = env("LICHESS_LOCAL_DIR")
     if not other:
         return RAW_ROOT / MONTH_NAMES[month]
     folder = Path(other)
@@ -90,12 +93,12 @@ def check_sha256(name: str, dst: Path) -> None:
         log.info("sha256 matches Lichess's")
 
 
-# Download a raw month: from our server, or from Lichess with IE500_SOURCE=scratch
+# Download a raw month: from Lichess, or from our server with data.raw_from: server
 def download(month: str) -> Path:
     name = month_key(month)
     dst = local_dir(month) / name
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if SOURCE == "scratch":
+    if RAW_FROM == "lichess":
         if dst.is_file():
             log.info("%s is already there", dst)
             return dst
@@ -105,18 +108,15 @@ def download(month: str) -> Path:
         log.info("done in %.1f minutes, checking the sha256", (time.time() - t0) / 60)
         check_sha256(name, dst)
         return dst
-    s = s3_settings()
-    s3 = boto3.client("s3", endpoint_url=s["LICHESS_S3_ENDPOINT"], aws_access_key_id=s["LICHESS_S3_ACCESS_KEY"],
-                      aws_secret_access_key=s["LICHESS_S3_SECRET_KEY"], region_name="us-east-1",
-                      config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 10}))
-    size = s3.head_object(Bucket=s["LICHESS_S3_BUCKET"], Key=name)["ContentLength"]
+    s3, bucket = client()
+    size = s3.head_object(Bucket=bucket, Key=name)["ContentLength"]
     if dst.is_file() and dst.stat().st_size == size:
         log.info("%s is already there", dst)
         return dst
     log.info("downloading %s (%.1f GB) to %s", name, size / 1e9, dst.parent)
     t0 = time.time()
     # a stopped download leaves no half file
-    s3.download_file(s["LICHESS_S3_BUCKET"], name, str(dst), Config=DOWNLOAD)
+    s3.download_file(bucket, name, str(dst), Config=DOWNLOAD)
     log.info("done in %.1f minutes, checking the sha256", (time.time() - t0) / 60)
     check_sha256(name, dst)
     return dst
@@ -126,13 +126,9 @@ def download(month: str) -> Path:
 class S3File(io.RawIOBase):
 
     def __init__(self, key: str):
-        s = s3_settings()
-        self.endpoint = s["LICHESS_S3_ENDPOINT"]
-        self.bucket = s["LICHESS_S3_BUCKET"]
+        self.s3, self.bucket = client(connect_timeout=30, read_timeout=120)
+        self.endpoint = self.s3.meta.endpoint_url
         self.key = key
-        self.s3 = boto3.client("s3", endpoint_url=self.endpoint, aws_access_key_id=s["LICHESS_S3_ACCESS_KEY"],
-                               aws_secret_access_key=s["LICHESS_S3_SECRET_KEY"], region_name="us-east-1",
-                               config=Config(s3={"addressing_style": "path"}, connect_timeout=30, read_timeout=120))
         self.size = self.s3.head_object(Bucket=self.bucket, Key=key)["ContentLength"]
         self.pos = 0
         self.body = None
@@ -164,12 +160,13 @@ class S3File(io.RawIOBase):
         return 0
 
 
-# A raw month; frames() gives its pieces in order
+# A raw month (a file on this computer, else downloaded from Lichess or read from our server); frames() gives its
+# pieces in order
 class MonthFile:
 
     def __init__(self, month: str):
         local = local_file(month)
-        if local is None and SOURCE == "scratch":
+        if local is None and RAW_FROM == "lichess":
             local = download(month)
         if local is not None:
             self.raw = io.FileIO(local, "rb")
@@ -183,60 +180,56 @@ class MonthFile:
             self.location = f"{self.raw.endpoint}/{self.raw.bucket}/{self.key}"
         self.sha256 = None
 
-    # The pieces of the file (only the first `limit` if given)
     def frames(self, limit: int | None = None) -> Iterator[bytes]:
+        """The compressed frames of the file in order (only the first `limit` if given).
+
+        Lichess compresses a month as thousands of independent zstd frames of a few MB each, so every frame can be
+        decompressed on its own and the cleanup can share them out to several processes. We read the file in
+        chunks and cut off one whole frame at a time; zstd itself tells how long a frame is."""
         f = io.BufferedReader(self.raw, BUFFER)
         sha = hashlib.sha256()
-        pos = 0
+        data = bytearray()      # read, but not given out yet
+        pos = 0                 # where `data` starts in the file
         count = 0
-
-        def read(n: int) -> bytes:
-            nonlocal pos
-            data = f.read(n)
-            if len(data) < n:
-                raise ValueError(f"{self.key} ends inside a frame at byte {pos:,}: incomplete file")
-            sha.update(data)
-            pos += n
-            return data
-
         while limit is None or count < limit:
-            if not f.peek(1):
-                if pos != self.size:
-                    raise ValueError(f"{self.key}: read {pos:,} of {self.size:,} bytes")
-                self.sha256 = sha.hexdigest()
-                return
-            magic_bytes = read(4)
-            magic = int.from_bytes(magic_bytes, "little")
-            if magic & 0xFFFFFFF0 == SKIPPABLE_MAGIC:
-                skip = int.from_bytes(read(4), "little")
-                read(skip)
-                continue
-            if magic != ZSTD_MAGIC:
-                raise ValueError(f"{self.key}: no zstd frame at byte {pos - 4:,}")
+            size = frame_size(data, pos)
+            while size is None:
+                chunk = f.read(BUFFER)
+                if not chunk:
+                    if data:
+                        raise ValueError(f"{self.key} ends inside a frame at byte {pos:,}: incomplete file")
+                    if pos != self.size:
+                        raise ValueError(f"{self.key}: read {pos:,} of {self.size:,} bytes")
+                    self.sha256 = sha.hexdigest()
+                    return
+                sha.update(chunk)
+                data += chunk
+                size = frame_size(data, pos)
+            frame = bytes(data[:size])
+            del data[:size]
+            pos += size
+            if not is_skippable(frame):
+                count += 1
+                yield frame
 
-            # frame header (zstd format, RFC 8878)
-            header = read(1)
-            flags = header[0]
-            single_segment = flags >> 5 & 1
-            window_size = 1 - single_segment
-            dict_id_size = (0, 1, 2, 4)[flags & 3]
-            content_size_size = (single_segment, 2, 4, 8)[flags >> 6]
-            parts = [magic_bytes, header, read(window_size + dict_id_size + content_size_size)]
 
-            # blocks: a 3-byte header (last block flag, type, size) and the block
-            while True:
-                block_header = read(3)
-                b = int.from_bytes(block_header, "little")
-                block_type = b >> 1 & 3
-                if block_type == 1:
-                    block_size = 1
-                else:
-                    block_size = b >> 3
-                parts.append(block_header)
-                parts.append(read(block_size))
-                if b & 1:
-                    break
-            if flags >> 2 & 1:
-                parts.append(read(4))
-            count += 1
-            yield b"".join(parts)
+def is_skippable(data) -> bool:
+    """A frame without content (zstd allows such frames for metadata); there are none in Lichess's files so far."""
+    return int.from_bytes(data[:4], "little") & 0xFFFFFFF0 == SKIPPABLE_MAGIC
+
+
+def frame_size(data, pos: int) -> int | None:
+    """The length of the frame at the start of `data`, or None if `data` does not hold the whole frame yet."""
+    if len(data) < 8:
+        return None
+    if is_skippable(data):
+        size = 8 + int.from_bytes(data[4:8], "little")
+        return size if len(data) >= size else None
+    if int.from_bytes(data[:4], "little") != ZSTD_MAGIC:
+        raise ValueError(f"no zstd frame at byte {pos:,}")
+    try:
+        return zstd.get_frame_size(data)
+    except zstd.ZstdError:
+        if len(data) > MAX_FRAME:
+            raise ValueError(f"no complete zstd frame in {MAX_FRAME:,} bytes from byte {pos:,}: damaged file")
+        return None

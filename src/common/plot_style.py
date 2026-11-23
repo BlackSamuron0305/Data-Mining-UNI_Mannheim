@@ -5,6 +5,8 @@ WIDTH = 14.5 / 2.54
 MONTH_COLOR = "#3d3d3a"
 PART_COLOR = {"train": "#0072B2", "test": "#D55E00"}
 SELECTION_COLOR = {"random": "#009E73", "stratified": "#0072B2", "stratified_balanced": "#D55E00"}
+MONTH_COLORS = {"2026-09": "#0072B2", "2026-08": "#D55E00"}    # the month we use, the month to compare with
+MONTH_LINES = {"2026-09": "-", "2026-08": "--"}
 INK, MUTED, GRID, EMPTY = "#1f1f1e", "#6b6b66", "#e4e4e0", "#f0f0ec"
 
 plt.rcParams.update({

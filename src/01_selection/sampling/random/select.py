@@ -1,4 +1,8 @@
-# Random selection: every game has the same chance
+"""Step 1.4, random selection: games from the pool, every game with the same chance; a share of them are test games.
+
+Usage:  uv run python -m src.01_selection.sampling.random.select   (after the cleanup)
+Output: data/01_selection/sampling/random/ (see sampling/common/write.py)
+"""
 import logging
 import time
 

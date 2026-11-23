@@ -1,4 +1,11 @@
-# Clean the month and keep a pool of games for the selections
+"""Step 1.2: one pass over the month. Keeps the complete cases, counts the moves and blunders of every bucket and
+group, and keeps a share of the games as the pool that the selections draw from.
+
+Usage:  uv run python -m src.01_selection.preparation.cleanup.cleanup
+        IE500_MONTH=2026-08 uv run python -m src.01_selection.preparation.cleanup.cleanup --no-pool   (August)
+Output: data/01_selection/preparation/cleanup/<month>/: cleanup.json, funnel.csv, groups.csv, buckets.csv,
+        pool.parquet, pool_buckets.parquet, cleanup.log
+"""
 import argparse
 import json
 import logging
@@ -18,7 +25,7 @@ from src.config import CFG, CLEANUP_DIR, MONTH, SEED, WORKERS, setup_log
 from ...download.storage import MonthFile
 from src.common.buckets import (B_OFF, N_B, N_E, N_G, N_W, SPEEDS, WIN, elo_label, game_group, move_buckets,
                                 uniform)
-from .filters import STEPS, complete_game, split_games
+from .filters import FILTERS, STEPS, complete_game, split_games
 
 log = logging.getLogger("cleanup")
 SEL = CFG["selection"]
@@ -63,48 +70,55 @@ def cat(xs: list, dt=np.int64) -> np.ndarray:
     return np.empty(0, dtype=dt)
 
 
-# Count the complete games in a piece of text and keep the pool games
 def clean_text(text: str, rate: float) -> dict:
+    """Count the complete games in a piece of text and keep the pool games (a share `rate`, chosen by game id).
+
+    Returns the funnel and, per bucket of the month: moves, blunders, games (with a move in it); per group: games,
+    moves, blunders (group_*); the pool games (pool) and, for each pool game and bucket it has a move in, one entry:
+    the game's row in the pool (rows), the bucket, and its moves and blunders there (b_moves, b_blunders)."""
     funnel = Counter()
-    b_moves, b_blunders, b_games = [], [], []
-    groups, g_moves, g_blunders = [], [], []
-    pool, c_rows, c_bucket, c_moves, c_blunders = [], [], [], [], []
+    # the month, per bucket: the bucket of every move and of every blunder, and the buckets of every game
+    bucket_of_move, bucket_of_blunder, buckets_of_game = [], [], []
+    # the month, per game: its group, moves and blunders
+    group_of_game, moves_of_game, blunders_of_game = [], [], []
+    # the pool: its games, and their entries (see sampling/common/entries.py)
+    pool, entry_row, entry_bucket, entry_moves, entry_blunders = [], [], [], [], []
     for chunk in split_games(text):
-        g = complete_game(chunk, funnel)
-        if g is None:
+        game = complete_game(chunk, funnel)
+        if game is None:
             continue
-        n = len(g.clk)
-        b = move_buckets(g.speed, g.white_elo, g.black_elo, g.clk)
-        ub, inv = np.unique(b, return_inverse=True)
-        b_moves.append(b)
-        b_blunders.append(b[g.blunder])
-        b_games.append(ub)
-        h = game_group(g.speed, g.white_elo, g.black_elo)
-        groups.append(h)
-        g_moves.append(n)
-        g_blunders.append(int(g.blunder.sum()))
-        u = uniform(g.game_id)
+        buckets = move_buckets(game.speed, game.white_elo, game.black_elo, game.clk)
+        own_buckets, which = np.unique(buckets, return_inverse=True)     # which: the position of each move's bucket
+        bucket_of_move.append(buckets)
+        bucket_of_blunder.append(buckets[game.blunder])
+        buckets_of_game.append(own_buckets)
+        group = game_group(game.speed, game.white_elo, game.black_elo)
+        group_of_game.append(group)
+        moves_of_game.append(len(game.clk))
+        blunders_of_game.append(int(game.blunder.sum()))
+        u = uniform(game.game_id)
         if u < rate:
-            c_rows.append(np.full(len(ub), len(pool), dtype=np.int32))
-            pool.append((g.game_id, g.speed, g.white_elo, g.black_elo, h, n, u, chunk.rstrip("\n") + "\n\n"))
-            c_bucket.append(ub)
-            c_moves.append(np.bincount(inv))
-            c_blunders.append(np.bincount(inv, weights=g.blunder))
-    groups = np.array(groups, dtype=np.int64)
-    g_moves = np.array(g_moves, dtype=float)
-    g_blunders = np.array(g_blunders, dtype=float)
+            entry_row.append(np.full(len(own_buckets), len(pool), dtype=np.int32))
+            pool.append((game.game_id, game.speed, game.white_elo, game.black_elo, group, len(game.clk), u,
+                         chunk.rstrip("\n") + "\n\n"))
+            entry_bucket.append(own_buckets)
+            entry_moves.append(np.bincount(which))
+            entry_blunders.append(np.bincount(which, weights=game.blunder))
+    group_of_game = np.array(group_of_game, dtype=np.int64)
+    moves_of_game = np.array(moves_of_game, dtype=float)
+    blunders_of_game = np.array(blunders_of_game, dtype=float)
     out = {"funnel": funnel}
-    out["moves"] = np.bincount(cat(b_moves), minlength=N_B)
-    out["blunders"] = np.bincount(cat(b_blunders), minlength=N_B)
-    out["games"] = np.bincount(cat(b_games), minlength=N_B)
-    out["group_games"] = np.bincount(groups, minlength=N_G)
-    out["group_moves"] = np.bincount(groups, weights=g_moves, minlength=N_G).astype(np.int64)
-    out["group_blunders"] = np.bincount(groups, weights=g_blunders, minlength=N_G).astype(np.int64)
+    out["moves"] = np.bincount(cat(bucket_of_move), minlength=N_B)
+    out["blunders"] = np.bincount(cat(bucket_of_blunder), minlength=N_B)
+    out["games"] = np.bincount(cat(buckets_of_game), minlength=N_B)
+    out["group_games"] = np.bincount(group_of_game, minlength=N_G)
+    out["group_moves"] = np.bincount(group_of_game, weights=moves_of_game, minlength=N_G).astype(np.int64)
+    out["group_blunders"] = np.bincount(group_of_game, weights=blunders_of_game, minlength=N_G).astype(np.int64)
     out["pool"] = pool
-    out["rows"] = cat(c_rows, np.int32)
-    out["bucket"] = cat(c_bucket, np.int16)
-    out["b_moves"] = cat(c_moves, np.int16)
-    out["b_blunders"] = cat(c_blunders, np.int16)
+    out["rows"] = cat(entry_row, np.int32)
+    out["bucket"] = cat(entry_bucket, np.int16)
+    out["b_moves"] = cat(entry_moves, np.int16)
+    out["b_blunders"] = cat(entry_blunders, np.int16)
     return out
 
 
@@ -227,7 +241,7 @@ def write(tot: Total, month: MonthFile, rate: float, seconds: float) -> None:
         pq.write_table(table, CLEANUP_DIR / "pool_buckets.parquet", compression="zstd")
     meta = {"month": MONTH, "source": month.location, "source_bytes": month.size,
             "source_sha256": month.sha256, "whole_file_read": month.sha256 is not None,
-            "seed": SEED, "pool_rate": rate, "n_complete_games": int(gt["games"].sum()),
+            "seed": SEED, "filters": FILTERS, "pool_rate": rate, "n_complete_games": int(gt["games"].sum()),
             "n_moves": int(bt["moves"].sum()), "n_blunders": int(bt["blunders"].sum()),
             "blunder_rate": float(bt["blunders"].sum() / bt["moves"].sum()), "n_pool": tot.n_pool,
             "minutes": round(seconds / 60, 1), "finished": datetime.now(timezone.utc).isoformat(timespec="seconds")}

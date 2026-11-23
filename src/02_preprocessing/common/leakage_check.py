@@ -17,14 +17,13 @@ import chess.pgn
 import numpy as np
 import pandas as pd
 
-from src.config import GAMES_SUB, LOGS_SUB, SEED, SELECTION_DIR, setup_log
+from src.config import GAMES_SUB, LOGS_SUB, SEED, SELECTION_DIR, TARGET, setup_log
 from src.common.pgn import iter_pgn, read_game, time_control
 from .extract import game_features
 from .false_predictors import FALSE_PREDICTORS
 from .paths import PRE_DIR
 
 log = logging.getLogger("leakage_check")
-TARGET = "blunder"
 
 
 def cut_game(pgn: str, n: int, rng: random.Random) -> str:

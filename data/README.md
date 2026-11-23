@@ -1,29 +1,30 @@
 # data
 
-Everything here is built by the scripts in `src/` and is not tracked by git, apart from this file. There is one
-folder per step, named like the folders of `src/`. Step 3 (`src/03_transformation/`) writes nothing: every training
-run transforms the columns itself.
+Everything here is built by the scripts in `src/` (or downloaded from our server, as `data:` in `config.yaml` says)
+and is not tracked by git, apart from this file. There is one folder per step, named like the folders of `src/`.
 
     data/
     ├── 01_selection/
-    │   ├── raw/<month>/                      the raw Lichess file of the month (about 30 GB), only to run from scratch
+    │   ├── raw/<month>/                      the raw Lichess file of the month (about 30 GB), only for start_with: raw
     │   ├── preparation/
     │   │   ├── cleanup/<month>/              the count of the month and the pool of games to draw from
     │   │   └── blunder_rates/<month>/        blunder probability of every bucket, with figures/
     │   └── sampling/
-    │       ├── stratified/                   run A: 350,000 games, split into training and test games
-    │       ├── stratified_balanced/          run B: the same test games, training games balanced
+    │       ├── stratified/                   the stratified run: 350,000 games, training games as drawn, test balanced
+    │       ├── stratified_balanced/          the balanced run: the same test games, training games balanced too
     │       └── comparison/                   the selections against the month
     ├── 02_preprocessing/
-    │   ├── stratified/                       one row per move, for run A
-    │   └── stratified_balanced/              the same for run B
+    │   ├── stratified/                       one row per move, for the stratified run
+    │   └── stratified_balanced/              the same for the balanced run
+    ├── 03_transformation/
+    │   └── <selection>/                      the tables the models read
     ├── 04_data_mining/
     │   └── <selection>/<method>/<run>/       the training runs
     └── 05_evaluation/
         ├── <selection>/                      the scores of every run
         └── before_reduction/                 the scores of the first version, before the column reduction
 
-`<month>` is `september` (the month we use) or `august`. `<selection>` is `stratified` or `stratified_balanced`, set by
+`<month>` is `september` (the month we use) or `august` (only counted, to compare its blunder probability). `<selection>` is `stratified` or `stratified_balanced`, set by
 `IE500_SELECTION` (default `stratified`).
 
 ## 01_selection
@@ -34,7 +35,9 @@ run transforms the columns itself.
   `pool_buckets.parquet` (the games the selections draw from), `cleanup.log`.
 - `preparation/blunder_rates/<month>/` comes from `src/01_selection/preparation/blunder_rates/rates.py`: `rates.csv`
   (blunder probability of every bucket, with its 95% interval and the probability the baseline predicts),
-  `by_time_left.csv`, `summary.md`, and `figures/` from `plots.ipynb`.
+  `by_time_left.csv`, `summary.md`, and `figures/` from `plots.ipynb`. `preparation/blunder_rates/months/` comes from
+  `months.py`: `months.csv` and `summary.md` (blunder probability of September and August, per speed and in total)
+  and `figures/months_by_time_left` from `plots.ipynb`.
 - `sampling/<selection>/` comes from `src/01_selection/sampling/<selection>/select.py`:
 
       summary.md            the main numbers; start here
@@ -55,9 +58,24 @@ run transforms the columns itself.
 ## 02_preprocessing
 
 `<selection>/` comes from `src/02_preprocessing/`: `extracted/` (every column, incl. the false predictors),
-`<without|with>_stockfish/clean/` (false predictors removed), `inspection/` (columns, correlations, figures),
-`final/` (reduced, with `removed.csv`; what the training reads), `with_stockfish/stockfish/` (the Stockfish columns,
-downloaded or computed; run B reads run A's, as they share their games), `logs/leakage_check.log`.
+`<without|with>_stockfish/clean/` (false predictors removed), `inspection/` (columns with their information about
+blunders, correlations, figures), `final/` (reduced, with `removed.csv`: every removed column, its rule and the
+measured numbers, and `kept.csv`: the columns kept whatever the numbers say; what step 3 reads),
+`with_stockfish/stockfish/` (the Stockfish columns,
+downloaded or computed; the balanced run reads the stratified run's, as they share their games), `logs/leakage_check.log`.
+
+## 03_transformation
+
+`<selection>/` comes from `src/03_transformation/transform.py`: `<without|with>_stockfish/train.parquet` and
+`test.parquet` (the final tables of step 2 with fixed categories, 1/0 for true/false, 32-bit floats and, for the
+training games, the column `fold`), `transform.json`, `logs/`.
+
+## What each state on our server holds
+
+`selected`: everything of `01_selection/` except `raw/` and the pool (`pool.parquet`, `pool_buckets.parquet`).
+`preprocessed`: everything of `02_preprocessing/` except `extracted/`, `clean/` and `stockfish/`. `transformed`:
+`03_transformation/`. The last two also hold what steps 4 and 5 read of step 1 (`rates.csv` of the blunder rates and
+`games.csv` of the selections). `stockfish`: the Stockfish columns of both runs, one file per part.
 
 ## 04_data_mining
 

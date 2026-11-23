@@ -1,4 +1,4 @@
-# Draw games from the pool and split them into training and test games
+"""Draw games from the pool and split them into training and test games (a share of every group)."""
 import numpy as np
 
 from src.config import CFG
@@ -29,7 +29,7 @@ def draw_stratified(u: np.ndarray, groups: np.ndarray, group_games: np.ndarray, 
         rows = np.flatnonzero(groups == group)
         if len(rows) < need[group]:
             raise ValueError(f"group {group} needs {need[group]:,} games but the pool has {len(rows):,}: "
-                             "raise selection.pool_rate in config.yaml and run the cleanup again")
+                             "raise selection.pool_rate in src/settings.py and run the cleanup again")
         rows = rows[np.argsort(u[rows], kind="stable")]
         chosen.append(rows[:need[group]])
     return np.concatenate(chosen)

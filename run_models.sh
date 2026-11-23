@@ -1,5 +1,6 @@
 #!/bin/bash
-# All training runs of the paper and their validation, for run A (stratified) and run B (stratified_balanced).
+# All training runs of the paper and their validation, for the stratified run and the balanced run (stratified_balanced).
+# They read the tables of step 3: run uv run python -m src.pipeline first (or start_with: transformed).
 # A step whose result is already there is skipped. Logs: data/04_data_mining/<selection>/logs/<step>.log
 #
 #   bash run_models.sh
@@ -42,7 +43,7 @@ models() {
   done
 }
 
-# run A: tuning, the readable tree, ablation, validation, importance
+# the stratified run: tuning, the readable tree, ablation, validation, importance
 export IE500_SELECTION=stratified
 models
 step tree_rules decision_tree/engine_depth4/run.json $PY -m src.04_data_mining.decision_tree.train --features engine --depths 4 --name engine_depth4
@@ -52,7 +53,7 @@ done
 step validate "" $PY -m src.05_evaluation.validate
 step importance "" $PY -m src.04_data_mining.importance
 
-# run B: balanced training games with the settings of run A
+# the balanced run: balanced training games with the settings of the stratified run
 export IE500_SELECTION=stratified_balanced
 models --params-from stratified --cv 0
 export IE500_SELECTION=stratified

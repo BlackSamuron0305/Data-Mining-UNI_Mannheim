@@ -1,4 +1,4 @@
-# 95% intervals for blunder rates
+"""95% intervals (Wilson) for blunder rates."""
 import numpy as np
 import pandas as pd
 

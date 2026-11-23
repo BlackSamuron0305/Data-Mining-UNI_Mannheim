@@ -1,9 +1,13 @@
 """Stockfish on the position before every move (how hard is the choice the mover faces?). Takes about 15 hours
-on 16 cores; the default is to download our results instead (README.md).
+on 16 cores; with data.stockfish: download in config.yaml our results are downloaded instead (README.md).
 
 Usage:  uv run python -m src.02_preprocessing.with_stockfish.engine [train|test ...]
-Output: data/02_preprocessing/<selection>/with_stockfish/stockfish/<part>/NNNNN.parquet (one file per batch of games), engine.json
-IE500_SHARD="i/n" does only every n-th batch file. Games another selection already analysed are skipped.
+Output: data/02_preprocessing/<selection>/with_stockfish/stockfish/<part>/NNNNN.parquet (one file per batch of games),
+engine.json. IE500_SHARD="i/n" does only every n-th batch.
+
+A game that is already analysed with the same engine and settings is skipped: in this folder (a stopped run continues),
+in the other selection's folder or in the downloaded results. After a change of the selection only its new games are
+analysed; results of games that are no longer selected stay in the files and are left out when the tables are joined.
 """
 from __future__ import annotations
 
@@ -32,27 +36,29 @@ ENG = CFG["engine"]
 MARKS = CFG["features"]["marks"]
 OUT_DIR = STOCKFISH_DIR
 TOP = 5
+THREADS = 1                  # per engine; one engine per worker process
+HASH_MB = 16
+BATCH = 50                   # games per output file, so that a stopped run continues where it was
 
 
 def engine_path() -> str:
-    path = env("STOCKFISH_PATH") or ENG["path"]
+    path = env("STOCKFISH_PATH") or "stockfish"
     found = shutil.which(path)
     if not found and Path(path).exists():
         found = path
     if not found:
-        raise FileNotFoundError(f"Stockfish not found at {path!r}: install it and set STOCKFISH_PATH in .env or the "
-                                "environment, or engine.path in config.yaml")
+        raise FileNotFoundError(f"Stockfish not found at {path!r}: install it and set STOCKFISH_PATH in .env")
     return found
 
 
 def settings() -> dict:
-    return {"top": ENG["top"], "worst": ENG["worst"], "threads": ENG["threads"], "hash_mb": ENG["hash_mb"],
-            "batch": ENG["batch"], "marks": MARKS}
+    return {"top": ENG["top"], "worst": ENG["worst"], "threads": THREADS, "hash_mb": HASH_MB, "batch": BATCH,
+            "marks": MARKS}
 
 
 def open_engine() -> chess.engine.SimpleEngine:
     eng = chess.engine.SimpleEngine.popen_uci(engine_path())
-    eng.configure({"Threads": ENG["threads"], "Hash": ENG["hash_mb"]})
+    eng.configure({"Threads": THREADS, "Hash": HASH_MB})
     return eng
 
 
@@ -143,7 +149,7 @@ def analyse_batch(job: tuple[str, tuple[str, ...]]) -> tuple[int, int, float]:
 
 
 def chosen_games(part: str) -> set[str]:
-    """The games of the part to analyse: all, or a fixed random subset of `engine.games`."""
+    """The games of the part to analyse: all, or a fixed random subset of `engine.games` (not set: all)."""
     games = pd.read_csv(SELECTION_DIR / GAMES_SUB / "games.csv", usecols=["game_id", "split"])
     ids = games.loc[games["split"] == part, "game_id"].tolist()
     n = (ENG.get("games") or {}).get(part)
@@ -171,8 +177,14 @@ def game_id_of(pgn: str) -> str:
     return site.rsplit("/", 1)[-1]
 
 
-def jobs(part: str, out_dir: Path, keep: set[str]):
-    """(file, games) of every batch of this shard whose file is still missing."""
+def next_number(out_dir: Path) -> int:
+    """The number of the next batch file: after every numbered file already there."""
+    numbers = [int(f.stem) for f in out_dir.glob("*.parquet") if f.stem.isdigit()]
+    return max(numbers, default=-1) + 1
+
+
+def jobs(part: str, out_dir: Path, keep: set[str], first: int):
+    """(file, games) of every batch of this shard; the files are numbered from `first` on."""
     my_shard, n_shards = shard()
     batch = []
     k = 0
@@ -180,37 +192,43 @@ def jobs(part: str, out_dir: Path, keep: set[str]):
         if game_id_of(pgn) not in keep:
             continue
         batch.append(pgn)
-        if len(batch) == ENG["batch"]:
-            out = out_dir / f"{k:05d}.parquet"
+        if len(batch) == BATCH:
+            out = out_dir / f"{first + k:05d}.parquet"
             if k % n_shards == my_shard and not out.exists():
                 yield str(out), tuple(batch)
             batch = []
             k += 1
-    out = out_dir / f"{k:05d}.parquet"
+    out = out_dir / f"{first + k:05d}.parquet"
     if batch and k % n_shards == my_shard and not out.exists():
         yield str(out), tuple(batch)
 
 
-# Games of the part that another selection already analysed with the same engine and settings
-def done_elsewhere(part: str, name: str) -> set[str]:
+def same_settings(meta: dict, name: str) -> bool:
+    return meta.get("engine") == name and {k: meta.get(k) for k in settings()} == settings()
+
+
+# Games of the part already analysed with the same engine and settings, in any selection's folder
+def done_before(part: str, name: str) -> set[str]:
     games = set()
     for selection in SELECTIONS:
         folder = PREPROCESSING_ROOT / selection / STOCKFISH_DIR.relative_to(PRE_DIR)
-        if folder.resolve() == STOCKFISH_DIR.resolve():
+        files = sorted((folder / part).glob("*.parquet"))
+        if not files:
             continue
         meta_path = folder / part / "engine.json"
         if not meta_path.exists():
             meta_path = folder / "engine.json"
-        if not meta_path.exists():
-            continue
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        if meta.get("engine") != name or {k: meta.get(k) for k in settings()} != settings():
+        same = meta_path.exists() and same_settings(json.loads(meta_path.read_text(encoding="utf-8")), name)
+        if not same:
+            if folder.resolve() == STOCKFISH_DIR.resolve():
+                raise RuntimeError(f"{folder / part} holds an analysis with another engine or other settings (or "
+                                   "without engine.json); delete the folder or restore the settings")
             log.info("%s: %s used another engine or other settings, not reused", part, folder)
             continue
-        for f in sorted((folder / part).glob("*.parquet")):
+        for f in files:
             games.update(pd.read_parquet(f, columns=["game_id"])["game_id"].unique())
     if games:
-        log.info("%s: %s games already analysed by another selection, skipped", part, f"{len(games):,}")
+        log.info("%s: %s games already analysed, skipped", part, f"{len(games):,}")
     return games
 
 
@@ -222,30 +240,28 @@ def run_part(part: str) -> None:
     eng = open_engine()
     name = eng.id.get("name", "?")
     eng.quit()
-    keep = chosen_games(part) - done_elsewhere(part, name)
+    chosen = chosen_games(part)
+    keep = chosen - done_before(part, name)
 
     meta_path = out_dir / "engine.json"
-    meta = {"engine": name, "part": part, "games": len(keep), **settings()}
-    if meta_path.exists():
-        old = json.loads(meta_path.read_text(encoding="utf-8"))
-        if {k: old.get(k) for k in meta} != meta:
-            raise RuntimeError(f"{out_dir} holds an analysis with other settings ({old}); delete the folder or "
-                               "restore the settings")
+    meta = {"engine": name, "part": part, "games": len(chosen), **settings()}
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
-    done = len(list(out_dir.glob("[0-9]*.parquet")))
+    first = next_number(out_dir)
     my_shard, n_shards = shard()
-    log.info("%s: %s, %s games to analyse, %d batch files already there, %d workers, shard %d of %d", part, name,
-             f"{len(keep):,}", done, WORKERS, my_shard + 1, n_shards)
+    log.info("%s: %s, %s of %s games still to analyse, %d workers, shard %d of %d", part, name, f"{len(keep):,}",
+             f"{len(chosen):,}", WORKERS, my_shard + 1, n_shards)
+    if not keep:
+        return
     t0 = time.time()
     games = 0
     positions = 0
     with ProcessPoolExecutor(WORKERS) as pool:
-        for g, p, _ in pool.map(analyse_batch, jobs(part, out_dir, keep), buffersize=2 * WORKERS):
+        for g, p, _ in pool.map(analyse_batch, jobs(part, out_dir, keep, first), buffersize=2 * WORKERS):
             games += g
             positions += p
             elapsed = time.time() - t0
-            left = len(keep) / n_shards - done / n_shards * ENG["batch"] - games
+            left = len(keep) / n_shards - games
             log.info("%s: %s games, %s positions, %.1f min, about %.0f min left", part, f"{games:,}",
                      f"{positions:,}", elapsed / 60, elapsed / games * max(left, 0) / 60)
     log.info("%s: done, %d batch files", part, len(list(out_dir.glob("*.parquet"))))

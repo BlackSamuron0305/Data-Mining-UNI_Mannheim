@@ -1,25 +1,25 @@
-"""Look at the columns of a move table to decide which ones can go: missing values, near-constant columns,
-correlations between columns and with the target. Only training games are looked at."""
+"""Look at the columns of a move table to decide which ones can go: missing values, near-constant columns, how much
+every column tells about blunders, and which columns repeat each other. Only training games are looked at."""
 import json
 
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
-from src.config import SEED
-from .paths import BOOKKEEPING, TARGET
+from src.config import BOOKKEEPING, CFG, TARGET
+from src.common.buckets import uniform
 
-SAMPLE_MOVES = 1_000_000
-HIGH = 0.9
+GAMES = CFG["reduction"]["inspection_games"]
+HIGH = CFG["reduction"]["redundant"]
+BINS = 20
 
 
 def sample(path) -> pd.DataFrame:
-    """A random sample of SAMPLE_MOVES moves of the training table."""
-    table = pq.read_table(path)
-    rng = np.random.default_rng(SEED)
-    n = min(SAMPLE_MOVES, table.num_rows)
-    rows = np.sort(rng.choice(table.num_rows, n, replace=False))
-    return table.take(rows).to_pandas()
+    """Every move of GAMES training games, chosen at random by game (all games if there are fewer)."""
+    ids = pq.read_table(path, columns=["game_id"]).column("game_id").unique().to_pylist()
+    if len(ids) > GAMES:
+        ids = sorted(ids, key=lambda g: uniform(g, "ie500-inspection"))[:GAMES]
+    return pq.read_table(path, filters=[("game_id", "in", ids)]).to_pandas()
 
 
 def feature_columns(df: pd.DataFrame) -> list[str]:
@@ -30,19 +30,35 @@ def is_number(s: pd.Series) -> bool:
     return pd.api.types.is_numeric_dtype(s) or pd.api.types.is_bool_dtype(s)
 
 
+def mutual_information(x: pd.Series, y: np.ndarray) -> float:
+    """How much the column tells about blunders, in bits: the mutual information between the column, cut into up to
+    20 bins of equal size (a missing value is a bin of its own), and the target. Unlike a correlation it also sees
+    relations that are not a straight line, and it works for text columns too."""
+    if not is_number(x) or x.nunique() <= BINS:
+        codes = pd.factorize(x.astype(str))[0]
+    else:
+        codes = pd.qcut(x.astype(float), BINS, labels=False, duplicates="drop").fillna(-1).to_numpy(dtype=int)
+    counts = pd.crosstab(codes, y).to_numpy(dtype=float)
+    joint = counts / counts.sum()
+    expected = joint.sum(1, keepdims=True) * joint.sum(0, keepdims=True)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return float(np.nansum(joint * np.log2(joint / expected)))
+
+
 def column_summary(df: pd.DataFrame) -> pd.DataFrame:
-    """One row per feature: kind, missing share, distinct values, share of the most common value, and the
-    correlation with the target."""
-    y = df[TARGET].astype(float)
+    """One row per feature: kind, missing share, distinct values, share of the most common value, information about
+    blunders (millibits) and the correlation with the target."""
+    y = df[TARGET].astype(int).to_numpy()
     rows = []
     for col in feature_columns(df):
         s = df[col]
         top = s.value_counts(normalize=True, dropna=False)
         row = {"column": col, "kind": "number" if is_number(s) else "category",
                "missing_pct": 100 * s.isna().mean(), "distinct": s.nunique(dropna=True),
-               "top_value_pct": 100 * float(top.iloc[0]) if len(top) else np.nan, "corr_target": np.nan}
+               "top_value_pct": 100 * float(top.iloc[0]) if len(top) else np.nan,
+               "mi_millibits": 1000 * mutual_information(s, y), "corr_target": np.nan}
         if is_number(s):
-            row["corr_target"] = s.astype(float).corr(y, method="spearman")
+            row["corr_target"] = s.astype(float).corr(pd.Series(y, index=s.index, dtype=float), method="spearman")
         rows.append(row)
     return pd.DataFrame(rows)
 
