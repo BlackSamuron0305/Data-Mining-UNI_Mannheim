@@ -1,5 +1,16 @@
 % References of the final paper (BibTeX, Chicago author-year style via natbib).
 
+@article{fayyad1996kdd,
+  author  = {Fayyad, Usama and Piatetsky-Shapiro, Gregory and Smyth, Padhraic},
+  title   = {From Data Mining to Knowledge Discovery in Databases},
+  journal = {AI Magazine},
+  volume  = {17},
+  number  = {3},
+  pages   = {37--54},
+  year    = {1996},
+  doi     = {10.1609/aimag.v17i3.1230}
+}
+
 @misc{lichessdb,
   author       = {{Lichess}},
   title        = {Lichess Open Database},
@@ -12,30 +23,27 @@
   author       = {{Lichess}},
   title        = {lila: \texttt{modules/analyse/src/main/Advice.scala}},
   year         = {2026},
-  howpublished = {\url{https://github.com/lichess-org/lila/blob/cf9e10df24b767b3bc5ee3d88c45437ac722025d/modules/analyse/src/main/Advice.scala}},
-  note         = {Thresholds of inaccuracies, mistakes and blunders}
+  howpublished = {\url{https://github.com/lichess-org/lila/blob/cf9e10d/modules/analyse/src/main/Advice.scala}}
 }
 
 @misc{lichessaccuracy,
   author       = {{Lichess}},
   title        = {Lichess Accuracy Metric},
   year         = {2026},
-  howpublished = {\url{https://lichess.org/page/accuracy}},
-  note         = {Win percentage from centipawns}
+  howpublished = {\url{https://lichess.org/page/accuracy}}
 }
 
 @misc{scalachessspeed,
   author       = {{Lichess}},
   title        = {scalachess: \texttt{core/src/main/scala/Speed.scala} and \texttt{Clock.scala}},
   year         = {2026},
-  howpublished = {\url{https://github.com/lichess-org/scalachess/tree/fbb8f2c75d25b64cb4c9995d867e46a877e1f418/core/src/main/scala}},
-  note         = {Speed categories by estimated game duration}
+  howpublished = {\url{https://github.com/lichess-org/scalachess/tree/fbb8f2c/core/src/main/scala}}
 }
 
 @inproceedings{mcilroyyoung2020maia,
   author    = {McIlroy-Young, Reid and Sen, Siddhartha and Kleinberg, Jon and Anderson, Ashton},
   title     = {Aligning Superhuman {AI} with Human Behavior: Chess as a Model System},
-  booktitle = {Proceedings of the 26th ACM SIGKDD International Conference on Knowledge Discovery \& Data Mining},
+  booktitle = {Proc.\ 26th ACM SIGKDD Conference on Knowledge Discovery and Data Mining},
   pages     = {1677--1687},
   year      = {2020},
   doi       = {10.1145/3394486.3403219}
@@ -43,16 +51,14 @@
 
 @misc{pythonchess,
   author       = {Fiekas, Niklas},
-  title        = {python-chess: a chess library for Python},
+  title        = {python-chess: a chess library for {P}ython},
   year         = {2026},
   howpublished = {\url{https://github.com/niklasf/python-chess}}
 }
 
+% 16 authors; only the first three ("et al."), as the page limit leaves no room for all
 @article{pedregosa2011sklearn,
-  author  = {Pedregosa, Fabian and Varoquaux, Ga{\"e}l and Gramfort, Alexandre and Michel, Vincent and
-             Thirion, Bertrand and Grisel, Olivier and Blondel, Mathieu and Prettenhofer, Peter and
-             Weiss, Ron and Dubourg, Vincent and Vanderplas, Jake and Passos, Alexandre and
-             Cournapeau, David and Brucher, Matthieu and Perrot, Matthieu and Duchesnay, {\'E}douard},
+  author  = {Pedregosa, Fabian and Varoquaux, Ga{\"e}l and Gramfort, Alexandre and others},
   title   = {Scikit-learn: Machine Learning in {P}ython},
   journal = {Journal of Machine Learning Research},
   volume  = {12},
@@ -90,9 +96,9 @@
   doi     = {10.1214/aos/1013203451}
 }
 
+% 8 authors; only the first three ("et al."), as the page limit leaves no room for all
 @inproceedings{ke2017lightgbm,
-  author    = {Ke, Guolin and Meng, Qi and Finley, Thomas and Wang, Taifeng and Chen, Wei and Ma, Weidong and
-               Ye, Qiwei and Liu, Tie-Yan},
+  author    = {Ke, Guolin and Meng, Qi and Finley, Thomas and others},
   title     = {{LightGBM}: A Highly Efficient Gradient Boosting Decision Tree},
   booktitle = {Advances in Neural Information Processing Systems 30},
   pages     = {3146--3154},
@@ -109,7 +115,7 @@
 @inproceedings{niculescu2005calibration,
   author    = {Niculescu-Mizil, Alexandru and Caruana, Rich},
   title     = {Predicting Good Probabilities with Supervised Learning},
-  booktitle = {Proceedings of the 22nd International Conference on Machine Learning},
+  booktitle = {Proc.\ 22nd International Conference on Machine Learning},
   pages     = {625--632},
   year      = {2005},
   doi       = {10.1145/1102351.1102430}
@@ -145,7 +151,7 @@
 @inproceedings{chen2016xgboost,
   author    = {Chen, Tianqi and Guestrin, Carlos},
   title     = {{XGBoost}: A Scalable Tree Boosting System},
-  booktitle = {Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining},
+  booktitle = {Proc.\ 22nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining},
   pages     = {785--794},
   year      = {2016},
   doi       = {10.1145/2939672.2939785}
@@ -183,7 +189,7 @@
 @inproceedings{akiba2019optuna,
   author    = {Akiba, Takuya and Sano, Shotaro and Yanase, Toshihiko and Ohta, Takeru and Koyama, Masanori},
   title     = {Optuna: A Next-generation Hyperparameter Optimization Framework},
-  booktitle = {Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery \& Data Mining},
+  booktitle = {Proc.\ 25th ACM SIGKDD Conference on Knowledge Discovery and Data Mining},
   pages     = {2623--2631},
   year      = {2019},
   doi       = {10.1145/3292500.3330701}
@@ -202,7 +208,7 @@
 @inproceedings{guo2017calibration,
   author    = {Guo, Chuan and Pleiss, Geoff and Sun, Yu and Weinberger, Kilian Q.},
   title     = {On Calibration of Modern Neural Networks},
-  booktitle = {Proceedings of the 34th International Conference on Machine Learning},
+  booktitle = {Proc.\ 34th International Conference on Machine Learning},
   pages     = {1321--1330},
   year      = {2017}
 }
