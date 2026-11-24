@@ -44,7 +44,9 @@ PARTS = ["train", "test"]
 # They are downloaded into the stratified run's folder, which the balanced run reads as well
 # (src/02_preprocessing/with_stockfish/preprocess.py).
 ENGINE_DIRS = [PREPROCESSING_ROOT / s / "with_stockfish" / "stockfish" for s in ("stratified", "stratified_balanced")]
-TRANSFER = TransferConfig(multipart_threshold=64 << 20, multipart_chunksize=64 << 20, max_concurrency=16)
+# small pieces, two at a time: the server's proxy cuts off any request that takes longer than about 60 seconds
+UPLOAD = TransferConfig(multipart_threshold=16 << 20, multipart_chunksize=16 << 20, max_concurrency=2)
+DOWNLOAD = TransferConfig(multipart_threshold=64 << 20, multipart_chunksize=64 << 20, max_concurrency=16)
 
 
 def client(**options):
@@ -159,7 +161,7 @@ def upload(packages: list[str], tmp: Path) -> None:
     total = sum(p.stat().st_size for p in files.values())
     print(f"uploading {len(files)} files, {total / 1e9:.2f} GB, to {bucket}/{folder()}/")
     for name, path in files.items():
-        s3.upload_file(str(path), bucket, f"{folder()}/{name}", Config=TRANSFER)
+        s3.upload_file(str(path), bucket, f"{folder()}/{name}", Config=UPLOAD)
         man["files"][name] = {"bytes": path.stat().st_size, "sha256": sha256(path)}
         print(f"  {name}: {path.stat().st_size / 1e6:.1f} MB")
     man["updated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -184,7 +186,7 @@ def download(packages: list[str]) -> None:
             if dst.exists() and dst.stat().st_size == info["bytes"] and sha256(dst) == info["sha256"]:
                 continue
             dst.parent.mkdir(parents=True, exist_ok=True)
-            s3.download_file(bucket, f"{folder()}/{name}", str(dst), Config=TRANSFER)
+            s3.download_file(bucket, f"{folder()}/{name}", str(dst), Config=DOWNLOAD)
             if dst.stat().st_size != info["bytes"] or sha256(dst) != info["sha256"]:
                 sys.exit(f"{name}: the download is incomplete or damaged; try again")
             print(f"  {name}: {info['bytes'] / 1e6:.1f} MB")
