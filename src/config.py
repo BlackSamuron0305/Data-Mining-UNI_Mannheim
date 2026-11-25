@@ -21,35 +21,38 @@ WORKERS: int = int(os.environ.get("IE500_WORKERS") or min(CFG["workers"], os.cpu
 MONTH: str = os.environ.get("IE500_MONTH") or CFG["month"]
 MONTH_NAMES = {"2026-08": "august", "2026-09": "september"}
 
-# data/ has one folder per step of src/; IE500_SELECTION picks the selection that the steps after the
-# selection use, and each of them has a folder per selection
+# data/ has one folder per step: data/<step>/<folder>/<file>. Inside a step there is a folder per month (step 1) or
+# per selection, and work/ for the files in between, which are never uploaded. IE500_SELECTION picks the selection
+# that the steps after the selection use.
 DATA = ROOT / "data"
-RAW_ROOT = DATA / "01_selection" / "raw"
-CLEANUP_DIR = DATA / "01_selection" / "preparation" / "cleanup" / MONTH_NAMES[MONTH]
-BLUNDER_RATES_DIR = DATA / "01_selection" / "preparation" / "blunder_rates" / MONTH_NAMES[MONTH]
+RAW_DIR = DATA / "00_raw"
+SELECTION_ROOT = DATA / "01_selection"
+MONTH_DIR = SELECTION_ROOT / MONTH_NAMES[MONTH]     # the counts and blunder rates of the month
+POOL_DIR = SELECTION_ROOT / "work"                  # the pool of games the selections draw from
+COMPARISON_DIR = SELECTION_ROOT / "comparison"
 SELECTIONS = ["random", "stratified", "stratified_balanced"]
 SELECTION = os.environ.get("IE500_SELECTION") or "stratified"
-SELECTION_ROOT = DATA / "01_selection" / "sampling"
 SELECTION_DIR = SELECTION_ROOT / SELECTION
-COMPARISON_DIR = SELECTION_ROOT / "comparison"
 PREPROCESSING_ROOT = DATA / "02_preprocessing"
 PREPROCESSING_DIR = PREPROCESSING_ROOT / SELECTION
-FINAL_DIRS = {"without_stockfish": PREPROCESSING_DIR / "without_stockfish" / "final",
-              "with_stockfish": PREPROCESSING_DIR / "with_stockfish" / "final"}
+PREPROCESSING_WORK = PREPROCESSING_ROOT / "work" / SELECTION
+STOCKFISH_DIR = PREPROCESSING_ROOT / "stockfish"    # the Stockfish columns of every selection
 TRANSFORMATION_ROOT = DATA / "03_transformation"
 TRANSFORMATION_DIR = TRANSFORMATION_ROOT / SELECTION
-TRANSFORMED_DIRS = {"without_stockfish": TRANSFORMATION_DIR / "without_stockfish",
-                    "with_stockfish": TRANSFORMATION_DIR / "with_stockfish"}
 RUNS_ROOT = DATA / "04_data_mining"
 RUNS_DIR = RUNS_ROOT / SELECTION
 VALIDATION_DIR = DATA / "05_evaluation" / SELECTION
-GAMES_SUB = "games"
-TABLES_SUB = "tables"
-LOGS_SUB = "logs"
+STEPS = ["01_selection", "02_preprocessing", "03_transformation"]
 KEYS = ["game_id", "ply"]   # one row per move
 TARGET = "blunder"
 # the columns of a move table that are not features: its keys, its bucket and group, and the target
 BOOKKEEPING = KEYS + ["bucket", "group", TARGET]
+STOCKFISH_PREFIX = "sf_"    # the Stockfish columns; without them a table is the one without Stockfish
+
+
+def log_path(step_root: Path, name: str) -> Path:
+    """data/<step>/logs/<name>.log"""
+    return step_root / "logs" / f"{name}.log"
 
 S3_NAMES = ("LICHESS_S3_ENDPOINT", "LICHESS_S3_BUCKET", "LICHESS_S3_ACCESS_KEY", "LICHESS_S3_SECRET_KEY")
 
@@ -71,8 +74,8 @@ def env(name: str) -> str | None:
     return os.environ.get(name) or dotenv().get(name) or None
 
 
-# Where the data comes from (data: in config.yaml): the state downloaded from our server, the later steps computed
-STATES = ["raw", "selected", "preprocessed", "transformed"]
+# Where the data comes from (data: in config.yaml): the step downloaded from our server, the later steps computed
+STATES = ["raw"] + STEPS
 START_WITH: str = CFG["data"]["start_with"]
 ALSO_DOWNLOAD: list[str] = list(CFG["data"].get("also_download") or [])
 RAW_FROM: str = CFG["data"]["raw_from"]
@@ -80,8 +83,8 @@ STOCKFISH: str = CFG["data"]["stockfish"]
 if START_WITH not in STATES:
     raise ValueError(f"data.start_with must be one of {', '.join(STATES)}, not {START_WITH!r}")
 for _state in ALSO_DOWNLOAD:
-    if _state not in STATES[1:]:
-        raise ValueError(f"data.also_download takes {', '.join(STATES[1:])}, not {_state!r}")
+    if _state not in STEPS:
+        raise ValueError(f"data.also_download takes {', '.join(STEPS)}, not {_state!r}")
 if RAW_FROM not in ("lichess", "server"):
     raise ValueError(f"data.raw_from must be lichess or server, not {RAW_FROM!r}")
 if STOCKFISH not in ("download", "compute"):
@@ -108,6 +111,7 @@ def s3_settings() -> dict[str, str]:
 
 def setup_log(path: Path) -> None:
     """Log to the screen and to `path` (overwritten)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     fmt = logging.Formatter("%(asctime)s | %(name)s | %(message)s", "%H:%M:%S")
     handlers = [logging.StreamHandler(sys.stdout), logging.FileHandler(path, mode="w", encoding="utf-8")]
     for h in handlers:

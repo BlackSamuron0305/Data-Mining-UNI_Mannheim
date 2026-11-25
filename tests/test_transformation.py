@@ -1,4 +1,5 @@
-"""Step 3: the tables the models read (transform.py) and what each model learns from the training games (encoding/)."""
+"""Step 3: the tables the models read (transform.py) and what each model learns from the training games
+(encoding.py)."""
 import importlib
 
 import numpy as np
@@ -9,9 +10,7 @@ import pytest
 from src.common.buckets import SPEEDS, uniform
 
 transform = importlib.import_module("src.03_transformation.transform")
-folds = importlib.import_module("src.03_transformation.encoding.folds")
-numeric = importlib.import_module("src.03_transformation.encoding.numeric")
-trees = importlib.import_module("src.03_transformation.encoding.trees")
+folds = numeric = trees = importlib.import_module("src.03_transformation.encoding")
 
 
 def moves(n_games=200, plies=10, speeds=("blitz", "bullet")):
@@ -56,10 +55,10 @@ def test_run_part_in_batches_with_missing_categories(tmp_path, monkeypatch):
     df = pd.concat([moves(100, speeds=("blitz",)), moves(100, speeds=("classical",)).assign(
         game_id=lambda d: "h" + d["game_id"])], ignore_index=True)
     df.to_parquet(final / "train.parquet", row_group_size=500)           # several batches, each with one speed
-    monkeypatch.setattr(transform, "FINAL_DIRS", {"without_stockfish": final})
-    monkeypatch.setattr(transform, "TRANSFORMED_DIRS", {"without_stockfish": tmp_path / "out"})
+    monkeypatch.setattr(transform, "PREPROCESSING_DIR", final)
+    monkeypatch.setattr(transform, "TRANSFORMATION_DIR", tmp_path / "out")
     monkeypatch.setattr(transform, "BATCH", 500)
-    info = transform.run_part("without_stockfish", "train")
+    info = transform.run_part("train")
     back = pq.read_table(tmp_path / "out" / "train.parquet").to_pandas()
     assert info["moves"] == len(df) == len(back) and info["games"] == 200
     assert set(back["speed"]) == {"blitz", "classical"} and list(back["speed"].cat.categories) == SPEEDS

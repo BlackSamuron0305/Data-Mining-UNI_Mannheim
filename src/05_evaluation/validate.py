@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import average_precision_score
 
-from src.config import CFG, GAMES_SUB, RUNS_DIR, RUNS_ROOT, SELECTION, SELECTION_DIR, SELECTION_ROOT, VALIDATION_DIR
+from src.config import CFG, RUNS_DIR, RUNS_ROOT, SELECTION, SELECTION_DIR, SELECTION_ROOT, VALIDATION_DIR
 from src.config import KEYS, TARGET
 from src.common.server import ensure
 from src.common.metrics import best_cutoff, calibration, decisions, move_loss, scores, top_name
@@ -43,7 +43,7 @@ def find_runs(runs_dir: Path = RUNS_DIR, label: str = "") -> dict[str, dict]:
 
 
 def test_games(selection_dir: Path) -> set[str]:
-    path = ensure(selection_dir / GAMES_SUB / "games.csv", "the selection (src/01_selection/sampling/)")
+    path = ensure(selection_dir / "games.csv", "the selection (python -m src.01_selection.select)")
     g = pd.read_csv(path, usecols=["game_id", "split"])
     return set(g.loc[g["split"] == "test", "game_id"])
 

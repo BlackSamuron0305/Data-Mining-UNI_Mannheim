@@ -7,16 +7,13 @@ IE500 Data Mining, University of Mannheim. Team 5: Predicting Blunders in Online
 - `IE500_DM_StudentProject.pdf`: the course's project description
 - `submission/`: proposal, final paper and presentation (LaTeX)
 - `src/`: the code in the five steps of the data mining process (Fayyad et al., 1996); `src/settings.py` holds the fixed settings of the method, `config.yaml` what can be chosen (where the data comes from, the number of processes), and `src/pipeline.py` runs steps 1 to 3 as `config.yaml` says
-  - `src/01_selection/`: getting the data and choosing the games
-    - `download/`: the raw files of September and August, from our server or from Lichess (`storage.py`)
-    - `preparation/cleanup/`: one pass over the month that drops unwanted games, counts moves and blunders per bucket and keeps a pool of games
-    - `preparation/blunder_rates/`: the blunder probability per bucket of the month, with `plots.ipynb`; `months.py` compares September with August, the only use of August: the blunder probability changes from month to month (a monthly bias)
-    - `sampling/`: the `random`, `stratified` and `stratified_balanced` selection, each in its own folder, the code they share in `common/`, and `comparison/`: the three selections against the month, with `report.ipynb` (incl. the weights)
-  - `src/02_preprocessing/`: the selected games turned into one row per move, the false predictors removed and the columns reduced
-    - `common/`: the extraction (every column, incl. the false predictors), the list of false predictors, the leakage check, the inspection
-    - `without_stockfish/`: preprocess, inspect (`report.ipynb`: correlation heatmap and decisions), reduce
-    - `with_stockfish/`: the same with the 15 Stockfish columns; Stockfish comes from the team's server by default (its `README.md`)
-  - `src/03_transformation/`: `transform.py` writes the tables the models read (fixed categories, 0/1, the held-out games); `encoding/` holds what each model learns from the training games: gaps filled, numbers scaled, categories as 0/1 columns or as numbers for the trees (its `README.md`)
+  - `src/01_selection/`: getting the data and choosing the games, one file per task
+    - `download.py` and `storage.py`: the raw month, from our server or from Lichess
+    - `cleanup.py` (with `filters.py`): one pass over the month that drops unwanted games, counts moves and blunders per bucket and keeps a pool of games
+    - `rates.py` (with `rates_plots.ipynb`): the blunder probability per bucket of the month; `months.py` compares September with August, the only use of August: the blunder probability changes from month to month (a monthly bias)
+    - `select.py --run random|stratified|stratified_balanced`: the three selections, with what they share in `sampling.py`, `swap.py` and `write.py`; `compare.py` (with `compare_report.ipynb`): the three selections against the month, incl. the weights
+  - `src/02_preprocessing/`: the selected games turned into one table per selection with one row per move: `extract.py`, `leakage_check.py`, `stockfish.py`, `preprocess.py` (false predictors out, Stockfish columns in), `inspection.py`, `reduce.py` and `report.ipynb` (its `README.md`)
+  - `src/03_transformation/`: `transform.py` writes the tables the models read (fixed categories, 0/1, the held-out games); `encoding.py` holds what each model learns from the training games: gaps filled, numbers scaled, categories as 0/1 columns or as numbers for the trees (its `README.md`)
   - `src/04_data_mining/<method>/`: one folder per training method; `src/04_data_mining/common.py` holds what they share
   - `src/05_evaluation/`: scores every training run on the same moves
   - `src/common/`: code used by several steps
@@ -40,16 +37,16 @@ Copy `.env.example` to `.env`. It holds only the keys of our server (needed to d
 
 ## Where the data comes from
 
-`data:` in `config.yaml` chooses where the pipeline starts. The chosen state is downloaded from our server; every step after it is computed:
+`data:` in `config.yaml` chooses where the pipeline starts. The chosen step is downloaded from our server; every step after it is computed:
 
 | `start_with` | downloaded | computed |
 |---|---|---|
 | `raw` | nothing: the raw month comes from Lichess (`raw_from: lichess`, about 30 GB) or from our copy (`raw_from: server`) | steps 1, 2 and 3 |
-| `selected` | the selected games, after step 1 (selection) | steps 2 and 3 |
-| `preprocessed` | the move tables, after step 2 (preprocessing) | step 3 |
-| `transformed` | the tables ready for the models, after step 3 (transformation) | nothing |
+| `01_selection` | the selected games | steps 2 and 3 |
+| `02_preprocessing` | the move tables | step 3 |
+| `03_transformation` | the tables ready for the models | nothing |
 
-`also_download` downloads earlier states as well, to look at them, e.g. `also_download: [selected, preprocessed]`. `stockfish` decides where the Stockfish columns of step 2 come from: `download` (our results) or `compute` (about 15 hours on 16 cores; needs `STOCKFISH_PATH` in `.env`, see `src/02_preprocessing/with_stockfish/README.md`). Then
+`also_download` downloads earlier steps as well, to look at them, e.g. `also_download: [01_selection]`. `stockfish` decides where the Stockfish columns of step 2 come from: `download` (our results) or `compute` (about 15 hours on 16 cores; needs `STOCKFISH_PATH` in `.env`, see `src/02_preprocessing/README.md`). Then
 
     uv run python -m src.pipeline --dry-run   # what would be downloaded and computed
     uv run python -m src.pipeline             # fills data/ up to step 3
@@ -57,38 +54,35 @@ Copy `.env.example` to `.env`. It holds only the keys of our server (needed to d
 
 A step is skipped if its result is there and newer than everything it reads, so a stopped run continues and a change (e.g. of the filters in `src/settings.py`) recomputes only what depends on it; the cleanup also checks that it was made with the current filters. On a 16-core desktop the cleanup of the month takes about 20 minutes and the selections about a minute each; the extraction of the moves takes a few minutes per run.
 
-Every script also runs on its own (the sections below). What it needs and does not find, it downloads if `config.yaml` takes that state from our server; otherwise it stops and names the step to run first. Downloads are checked against their sha256 and go to the same folders as the computed files, so the later steps cannot tell the difference.
+Every script also runs on its own (the sections below). What it needs and does not find, it downloads if `config.yaml` takes that step from our server; otherwise it stops and names the step to run first. Downloads are checked against their sha256 and go to the same folders as the computed files, so the later steps cannot tell the difference.
 
-`uv run python -m src.common.server list` shows what is on the server; `download` fetches the states of `config.yaml` (or the ones named). `upload selected|preprocessed|transformed|stockfish` puts a state computed on this computer there and needs a key that may write; `stockfish` is the Stockfish columns of both runs.
+The server holds a copy of `data/01_selection/` to `data/03_transformation/` without the `work/` folders and the logs. `uv run python -m src.common.server list` shows what is there; `download` fetches the steps of `config.yaml` (or the ones named, e.g. `download 02_preprocessing/stockfish`). `upload 01_selection|02_preprocessing|03_transformation` puts a step computed on this computer there and needs a key that may write.
 
 ## Data selection
 
-    uv run python -m src.01_selection.download.september                 # the raw file of September 2026 into data/01_selection/raw/<month>/ (about 30 GB, checked against Lichess's sha256)
-    uv run python -m src.01_selection.download.august                    # the same for August 2026
-    IE500_MONTH=2026-08 uv run python -m src.01_selection.preparation.cleanup.cleanup --no-pool   # August: counts only, for its blunder rates
-    IE500_MONTH=2026-08 uv run python -m src.01_selection.preparation.blunder_rates.rates
-    uv run python -m src.01_selection.preparation.blunder_rates.months   # after the rates of both months: September against August
-    uv run python -m src.01_selection.preparation.cleanup.cleanup        # one pass over the month into data/01_selection/preparation/cleanup/<month>/ (about 20 minutes)
-    uv run python -m src.01_selection.preparation.blunder_rates.rates    # blunder probability per bucket into data/01_selection/preparation/blunder_rates/<month>/; figures: plots.ipynb
-    uv run python -m src.01_selection.sampling.random.select             # 350,000 games at random into data/01_selection/sampling/random/
-    uv run python -m src.01_selection.sampling.stratified.select         # stratified by speed x Elo, test games balanced, into data/01_selection/sampling/stratified/
-    uv run python -m src.01_selection.sampling.stratified_balanced.select  # the same, training games balanced too, into data/01_selection/sampling/stratified_balanced/
-    uv run python -m src.01_selection.sampling.comparison.compare  # the three against the month into data/01_selection/sampling/comparison/; figures: report.ipynb
+    uv run python -m src.01_selection.download 2026-09                   # the raw file of September 2026 into data/00_raw/september/ (about 30 GB, checked against Lichess's sha256)
+    uv run python -m src.01_selection.download 2026-08                   # the same for August 2026
+    IE500_MONTH=2026-08 uv run python -m src.01_selection.cleanup --no-pool   # August: counts only, for its blunder rates
+    IE500_MONTH=2026-08 uv run python -m src.01_selection.rates
+    uv run python -m src.01_selection.cleanup                            # one pass over the month into data/01_selection/september/ (about 20 minutes)
+    uv run python -m src.01_selection.rates                              # blunder probability per bucket into data/01_selection/september/; figures: rates_plots.ipynb
+    uv run python -m src.01_selection.months                             # after the rates of both months: September against August
+    uv run python -m src.01_selection.select --run random                # 350,000 games at random into data/01_selection/random/
+    uv run python -m src.01_selection.select --run stratified            # stratified by speed x Elo, test games balanced, into data/01_selection/stratified/
+    uv run python -m src.01_selection.select --run stratified_balanced   # the same, training games balanced too, into data/01_selection/stratified_balanced/
+    uv run python -m src.01_selection.compare                            # the three against the month into data/01_selection/comparison/; figures: compare_report.ipynb
 
 Every selection writes its games (PGN and `games.csv` with each game's chance to be picked and its weight), tables and a `summary.md`. The later steps use the selection named by `IE500_SELECTION` (default `stratified`).
 
 ## Preprocessing
 
-    uv run python -m src.02_preprocessing.common.extract                   # one row per move with every column, incl. the false predictors, into data/02_preprocessing/<selection>/extracted/
-    uv run python -m src.02_preprocessing.common.leakage_check             # the kept columns are known before the move; the false predictors are not
-    uv run python -m src.02_preprocessing.without_stockfish.preprocess     # removes the 13 false predictors
-    uv run python -m src.02_preprocessing.without_stockfish.inspection     # missing values, near-constant columns, correlations (training games only)
-    uv run python -m src.02_preprocessing.without_stockfish.reduce         # removes the columns we do not need, by fixed rules; see report.ipynb
-    uv run python -m src.02_preprocessing.with_stockfish.preprocess        # adds the 15 Stockfish columns (data.stockfish: downloaded or computed)
-    uv run python -m src.02_preprocessing.with_stockfish.inspection
-    uv run python -m src.02_preprocessing.with_stockfish.reduce
+    uv run python -m src.02_preprocessing.extract          # one row per move with every column, incl. the false predictors, into data/02_preprocessing/work/<selection>/
+    uv run python -m src.02_preprocessing.leakage_check    # the kept columns are known before the move; the false predictors are not
+    uv run python -m src.02_preprocessing.preprocess       # removes the 13 false predictors, adds the 15 Stockfish columns (data.stockfish: downloaded or computed)
+    uv run python -m src.02_preprocessing.inspection       # missing values, near-constant columns, correlations (training games only)
+    uv run python -m src.02_preprocessing.reduce           # removes the columns we do not need, by fixed rules; see report.ipynb
 
-Results: `data/02_preprocessing/<selection>/<without|with>_stockfish/final/` (38 features after the false predictors, 53 with Stockfish). The reduction follows fixed rules on the inspection of 70,000 training games (`src/02_preprocessing/common/reduction.py`, settings `reduction` in `src/settings.py`): *domain*: a column that follows from others or that a kept column covers (a written list in each `reduce.py`); *redundant*: of two columns with |Spearman| ≥ 0.9 the one that tells less about blunders (mutual information); *weak*: less than 1% of what the best column tells. A short list of columns stays whatever the numbers say (`KEEP`, with reasons). With Stockfish only Stockfish columns can go, so that table is the one without plus Stockfish columns; the balanced run takes the stratified run's decisions. Every removed column, its rule and the measured numbers are in `removed.csv`, the kept exceptions in `kept.csv`. `reduction.apply: False` keeps every column but the false predictors. To run Stockfish yourself instead of downloading it: `src/02_preprocessing/with_stockfish/README.md`.
+Results: `data/02_preprocessing/<selection>/train.parquet` and `test.parquet`, one table with the Stockfish columns (`sf_*`); a model without Stockfish leaves them out. The reduction follows fixed rules on the inspection of 70,000 training games (`src/02_preprocessing/reduce.py`, settings `reduction` in `src/settings.py`): *domain*: a column that follows from others or that a kept column covers (a written list); *redundant*: of two columns with |Spearman| ≥ 0.9 the one that tells less about blunders (mutual information); *weak*: less than 1% of what the best column tells. A short list of columns stays whatever the numbers say (`KEEP`, with reasons). The rules run first on the columns without Stockfish alone, then on the Stockfish columns, which may only remove Stockfish columns; so the table without its `sf_*` columns is exactly the table without Stockfish. The balanced run takes the stratified run's decisions. Every removed column, its rule and the measured numbers are in `removed.csv`, the kept exceptions in `kept.csv`. `reduction.apply: False` keeps every column but the false predictors. To run Stockfish yourself instead of downloading it: `src/02_preprocessing/README.md`.
 
 ## Transformation
 
@@ -102,7 +96,7 @@ The leakage check cuts sample games at a random move, scrambles everything Liche
 
 ## Training
 
-Every method has its own folder in `src/04_data_mining/`, every run writes `data/04_data_mining/<selection>/<method>/<name>/` (predictions of the held-out training games and of the test games, settings, model). Training reads the tables of step 3 (downloaded if `config.yaml` says so, see above). Feature sets: `basic` (speed, Elo, clock), `context` (every column of `data/03_transformation/<selection>/without_stockfish/`), `engine` (every column of `data/03_transformation/<selection>/with_stockfish/`). The columns come from the tables, so a column removed in `reduce.py` is gone from training too. `bash run_models.sh` runs every training and validation of the paper.
+Every method has its own folder in `src/04_data_mining/`, every run writes `data/04_data_mining/<selection>/<method>/<name>/` (predictions of the held-out training games and of the test games, settings, model). Training reads the tables of step 3 (downloaded if `config.yaml` says so, see above). Feature sets: `basic` (speed, Elo, clock), `context` (every column of `data/03_transformation/<selection>/` but the Stockfish columns `sf_*`), `engine` (every column). The columns come from the tables, so a column removed in `reduce.py` is gone from training too. `bash run_models.sh` runs every training and validation of the paper.
 
     uv run python -m src.04_data_mining.bucket_rate.train --source month               # baseline: the blunder probability of the move's bucket in the month
     uv run python -m src.04_data_mining.bucket_rate.train --source train               # the same from the training games only
@@ -119,7 +113,7 @@ Every method has its own folder in `src/04_data_mining/`, every run writes `data
 
 Hyperparameters are command-line options (`--help` of each method); give every setting its own `--name`, e.g. `--C 0.1 --name context_C0.1`, and choose between them with the validation below. Why each method is there: Chapter 4 of the final paper.
 
-`--max-games N` trains on a random subset of the training games for a quick run. A new method goes into a new folder `src/04_data_mining/<method>/train.py` with a `fit` function (and `DEFAULTS`, `SPACE`, `GRID` for the tuning) and saves its run with `save_run` of `src/04_data_mining/common.py`. A new text column needs its values in `CATEGORIES` of `src/03_transformation/encoding/categories.py`.
+`--max-games N` trains on a random subset of the training games for a quick run. A new method goes into a new folder `src/04_data_mining/<method>/train.py` with a `fit` function (and `DEFAULTS`, `SPACE`, `GRID` for the tuning) and saves its run with `save_run` of `src/04_data_mining/common.py`. A new text column needs its values in `CATEGORIES` of `src/03_transformation/encoding.py`.
 
 ### Tuning, ablation, importance
 
@@ -144,13 +138,11 @@ Does balancing the training games help the models? The stratified run is the nor
 In Git Bash (in PowerShell set `$env:IE500_SELECTION = "stratified_balanced"` once instead):
 
     export IE500_SELECTION=stratified_balanced
-    uv run python -m src.01_selection.sampling.stratified_balanced.select
-    uv run python -m src.02_preprocessing.common.extract
-    uv run python -m src.02_preprocessing.with_stockfish.engine           # after the stratified run's engine: only the balanced run's new games
-    uv run python -m src.02_preprocessing.without_stockfish.preprocess
-    uv run python -m src.02_preprocessing.without_stockfish.reduce            # the same columns as the stratified run
-    uv run python -m src.02_preprocessing.with_stockfish.preprocess
-    uv run python -m src.02_preprocessing.with_stockfish.reduce
+    uv run python -m src.01_selection.select --run stratified_balanced
+    uv run python -m src.02_preprocessing.extract
+    uv run python -m src.02_preprocessing.stockfish        # after the stratified run's engine: only the balanced run's new games
+    uv run python -m src.02_preprocessing.preprocess
+    uv run python -m src.02_preprocessing.reduce           # the same columns as the stratified run
     uv run python -m src.03_transformation.transform
     uv run python -m src.04_data_mining.bucket_rate.train --source month
     uv run python -m src.04_data_mining.tune --method gradient_boosting --features context --params-from stratified --cv 0   # and every other run of the stratified run, same settings

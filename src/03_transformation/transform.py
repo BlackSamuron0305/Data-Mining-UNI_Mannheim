@@ -3,11 +3,11 @@
 Takes the final tables of step 2 and writes them with what every model needs and nothing learned from the games:
 the text columns as categories with a fixed list of values, true/false as 1/0, decimals as 32-bit floats, and for
 the training games the column `fold` (the held-out games that choose between runs). What a model learns from the
-games (gaps filled, scaling, one 0/1 column per category) stays in its own pipeline (encoding/numeric.py,
-encoding/trees.py) and is fitted on the training games only.
+games (gaps filled, scaling, one 0/1 column per category) stays in its own pipeline (numeric_prep and tree_features in
+encoding.py) and is fitted on the training games only.
 
 Usage:  uv run python -m src.03_transformation.transform
-Output: data/03_transformation/<selection>/<without|with>_stockfish/train.parquet, test.parquet, transform.json
+Output: data/03_transformation/<selection>/train.parquet, test.parquet, transform.json
 """
 import json
 import logging
@@ -16,10 +16,9 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from src.config import BOOKKEEPING, FINAL_DIRS, LOGS_SUB, TRANSFORMATION_DIR, TRANSFORMED_DIRS, setup_log
+from src.config import BOOKKEEPING, PREPROCESSING_DIR, TRANSFORMATION_DIR, TRANSFORMATION_ROOT, log_path, setup_log
 from src.common.server import ensure
-from .encoding.categories import add_categories
-from .encoding.folds import VALID_FRAC, fold_of
+from .encoding import VALID_FRAC, add_categories, fold_of
 
 log = logging.getLogger("transformation")
 PARTS = ("train", "test")
@@ -39,11 +38,10 @@ def transform(df, part):
     return df
 
 
-def run_part(table: str, part: str) -> dict:
-    src = ensure(FINAL_DIRS[table] / f"{part}.parquet", "step 2 (src/02_preprocessing/, README.md)")
-    out_dir = TRANSFORMED_DIRS[table]
-    out_dir.mkdir(parents=True, exist_ok=True)
-    tmp = out_dir / f"{part}.parquet.part"
+def run_part(part: str) -> dict:
+    src = ensure(PREPROCESSING_DIR / f"{part}.parquet", "step 2 (src/02_preprocessing/, README.md)")
+    TRANSFORMATION_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = TRANSFORMATION_DIR / f"{part}.parquet.part"
     writer = None
     rows = 0
     games = set()
@@ -63,21 +61,20 @@ def run_part(table: str, part: str) -> dict:
     finally:
         if writer is not None:
             writer.close()
-    tmp.replace(out_dir / f"{part}.parquet")
+    tmp.replace(TRANSFORMATION_DIR / f"{part}.parquet")
     info = {"moves": rows, "games": len(games), "columns": len(schema.names)}
     if part == "train":
         info["held_out_games"] = len(valid_games)
-    log.info("%s %s: %s moves, %s games%s", table, part, f"{rows:,}", f"{len(games):,}",
+    log.info("%s: %s moves, %s games%s", part, f"{rows:,}", f"{len(games):,}",
              f", {len(valid_games):,} held out" if part == "train" else "")
     return info
 
 
 def run() -> None:
-    (TRANSFORMATION_DIR / LOGS_SUB).mkdir(parents=True, exist_ok=True)
-    setup_log(TRANSFORMATION_DIR / LOGS_SUB / "transform.log")
+    setup_log(log_path(TRANSFORMATION_ROOT, f"transform_{TRANSFORMATION_DIR.name}"))
     meta = {"valid_frac": VALID_FRAC}
-    for table in TRANSFORMED_DIRS:
-        meta[table] = {part: run_part(table, part) for part in PARTS}
+    for part in PARTS:
+        meta[part] = run_part(part)
     (TRANSFORMATION_DIR / "transform.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 

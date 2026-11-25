@@ -8,8 +8,8 @@ import pytest
 
 from pgn_factory import lichess_game
 
-storage = importlib.import_module("src.01_selection.download.storage")
-cleanup = importlib.import_module("src.01_selection.preparation.cleanup.cleanup")
+storage = importlib.import_module("src.01_selection.storage")
+cleanup = importlib.import_module("src.01_selection.cleanup")
 SKIPPABLE = (0x184D2A50).to_bytes(4, "little")
 
 
@@ -80,7 +80,7 @@ def test_clean_frame_keeps_the_cut_games_for_the_neighbours():
 
 
 def test_cleanup_json_records_the_filters(tmp_path, monkeypatch):
-    monkeypatch.setattr(cleanup, "CLEANUP_DIR", tmp_path)
+    monkeypatch.setattr(cleanup, "MONTH_DIR", tmp_path)
     tot = cleanup.Total(None)
     tot.add(cleanup.clean_text(lichess_game(6), 0.0))
 

@@ -246,7 +246,7 @@ follow early blunders, exactly the moves we want to predict.
   \centering\footnotesize
   \caption{Games of September 2026 after each filter step, by speed.}
   \label{tab:funnel}
-  % numbers: data/01_selection/preparation/cleanup/september/funnel.csv
+  % numbers: data/01_selection/september/funnel.csv
   \setlength{\tabcolsep}{4pt}
   \begin{tabular}{@{}lrrrrr@{}}
     \toprule
@@ -355,7 +355,7 @@ target, which also sees curved relations. Speed, rating and clock, on which the 
 as do move number and total material ($\rho \approx -0.9$), which measure the time in the game and how
 simplified the position is. The rules remove \stale{7} features by domain and \stale{5} as weak (colour, hour,
 kind of event, rating gap, check), leaving \stale{26}; boosting scored the same without them. With Stockfish only
-engine columns may go (\tbd{} of 15 remain), so the two tables differ exactly by the engine. The repository
+engine columns may go (\tbd{} of 15 remain), so leaving them out gives exactly the features without the engine. The repository
 documents every removal with the measured numbers.
 
 % ======================================================================================================

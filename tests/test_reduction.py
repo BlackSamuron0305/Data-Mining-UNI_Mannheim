@@ -5,9 +5,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-inspection = importlib.import_module("src.02_preprocessing.common.inspection")
-reduction = importlib.import_module("src.02_preprocessing.common.reduction")
-with_reduce = importlib.import_module("src.02_preprocessing.with_stockfish.reduce")
+inspection = importlib.import_module("src.02_preprocessing.inspection")
+reduction = importlib.import_module("src.02_preprocessing.reduce")
 
 
 def test_mutual_information():
@@ -63,62 +62,57 @@ def test_only_candidates_can_go(tmp_path):
     assert got == {"sf_wp_best": "redundant", "sf_weak": "weak"}
 
 
-def write_clean(pre_dir, table, columns):
-    folder = pre_dir / table / "clean"
-    folder.mkdir(parents=True)
+def run_folders(tmp_path, monkeypatch, selection, columns):
+    """The clean tables of a run in work/, and where reduce.py writes its final tables."""
+    work, final = tmp_path / "work" / selection, tmp_path / selection
+    work.mkdir(parents=True)
     for part in ("train", "test"):
-        pd.DataFrame({c: [1.0, 2.0] for c in columns}).to_parquet(folder / f"{part}.parquet")
+        pd.DataFrame({c: [1.0, 2.0] for c in columns}).to_parquet(work / f"clean_{part}.parquet")
+    monkeypatch.setattr(reduction, "PREPROCESSING_WORK", work)
+    monkeypatch.setattr(reduction, "PREPROCESSING_DIR", final)
+    monkeypatch.setattr(reduction, "PREPROCESSING_ROOT", tmp_path)
+    monkeypatch.setattr(reduction, "SELECTION", selection)
+    return final
 
 
-def test_reduce_tables_writes_the_final_tables(tmp_path, monkeypatch):
-    monkeypatch.setattr(reduction, "PRE_DIR", tmp_path)
-    write_clean(tmp_path, "without_stockfish", ["game_id", "a", "b"])
+def test_reduce_writes_the_final_tables(tmp_path, monkeypatch):
+    final = run_folders(tmp_path, monkeypatch, "stratified", ["game_id", "a", "b"])
     decisions = pd.DataFrame([{"column": "b", "rule": "weak", "basis": "inspection", "reason": "r"}])
-    reduction.reduce_tables("without_stockfish", lambda: (decisions, {"a": "kept"}))
-    final = tmp_path / "without_stockfish" / "final"
+    monkeypatch.setattr(reduction, "decisions", lambda: decisions)
+    monkeypatch.setattr(reduction, "KEEP", {"a": "kept"})
+    reduction.run()
     assert list(pd.read_parquet(final / "train.parquet").columns) == ["game_id", "a"]
     assert list(pd.read_csv(final / "removed.csv")["column"]) == ["b"]
     assert list(pd.read_csv(final / "kept.csv")["column"]) == ["a"]
 
 
 def test_reduction_can_be_switched_off(tmp_path, monkeypatch):
-    monkeypatch.setattr(reduction, "PRE_DIR", tmp_path)
+    final = run_folders(tmp_path, monkeypatch, "stratified", ["game_id", "a", "b"])
     monkeypatch.setitem(reduction.RULES, "apply", False)
-    write_clean(tmp_path, "without_stockfish", ["game_id", "a", "b"])
-    reduction.reduce_tables("without_stockfish", lambda: pytest.fail("no decisions without a reduction"))
-    final = tmp_path / "without_stockfish" / "final"
+    monkeypatch.setattr(reduction, "decisions", lambda: pytest.fail("no decisions without a reduction"))
+    reduction.run()
     assert list(pd.read_parquet(final / "test.parquet").columns) == ["game_id", "a", "b"]
     assert pd.read_csv(final / "removed.csv").empty
 
 
 def test_the_balanced_run_takes_the_decisions_of_the_stratified_run(tmp_path, monkeypatch):
-    monkeypatch.setattr(reduction, "PRE_DIR", tmp_path / "stratified_balanced")
-    monkeypatch.setattr(reduction, "PREPROCESSING_ROOT", tmp_path)
-    monkeypatch.setattr(reduction, "SELECTION", "stratified_balanced")
-    write_clean(tmp_path / "stratified_balanced", "without_stockfish", ["game_id", "a", "b"])
-    stratified = tmp_path / "stratified" / "without_stockfish" / "final"
-    stratified.mkdir(parents=True)
+    final = run_folders(tmp_path, monkeypatch, "stratified_balanced", ["game_id", "a", "b"])
+    (tmp_path / "stratified").mkdir()
     pd.DataFrame([{"column": "a", "rule": "weak", "basis": "inspection", "reason": "r"}]) \
-        .to_csv(stratified / "removed.csv", index=False)
-    reduction.reduce_tables("without_stockfish", lambda: pytest.fail("the balanced run decides nothing itself"))
-    final = tmp_path / "stratified_balanced" / "without_stockfish" / "final"
+        .to_csv(tmp_path / "stratified" / "removed.csv", index=False)
+    monkeypatch.setattr(reduction, "decisions", lambda: pytest.fail("the balanced run decides nothing itself"))
+    reduction.run()
     assert list(pd.read_parquet(final / "train.parquet").columns) == ["game_id", "b"]
 
 
-def test_with_stockfish_repeats_the_table_without(tmp_path, monkeypatch):
-    without, with_ = tmp_path / "without_stockfish", tmp_path / "with_stockfish"
-    (without / "final").mkdir(parents=True)
-    pd.DataFrame([{"column": "material_own", "rule": "domain", "basis": "domain knowledge", "reason": "follows"},
-                  {"column": "hour", "rule": "weak", "basis": "inspection", "reason": "tells nothing"}]) \
-        .to_csv(without / "final" / "removed.csv", index=False)
-    (with_ / "inspection").mkdir(parents=True)
-    inspection_dir(with_ / "inspection", {"eval_wp": 10, "material_own": 9, "hour": 0.01, "sf_wp_best": 12,
-                                          "sf_gap_2": 8, "sf_best_move": 1},
-                   [("eval_wp", "sf_wp_best", 0.99), ("material_own", "sf_gap_2", 0.95)])
-    monkeypatch.setattr(with_reduce, "WITHOUT_DIR", without)
-    monkeypatch.setattr(with_reduce, "WITH_DIR", with_)
-    got, _ = with_reduce.decisions()
-    rules = removed(got)
+def test_stockfish_columns_never_remove_a_column_without_stockfish(tmp_path, monkeypatch):
+    # first round without Stockfish: hour is weak against eval_wp (10), small_but_kept is not (0.11 > 1% of 10),
+    # although it would be against the best Stockfish column (12)
+    folder = inspection_dir(tmp_path, {"eval_wp": 10, "material_own": 9, "hour": 0.01, "small_but_kept": 0.11,
+                                       "sf_wp_best": 12, "sf_gap_2": 8, "sf_best_move": 1},
+                            [("eval_wp", "sf_wp_best", 0.99), ("material_own", "sf_gap_2", 0.95)])
+    monkeypatch.setattr(reduction, "INSPECTION", folder)
+    rules = removed(reduction.decisions())
     assert rules == {"material_own": "domain", "hour": "weak", "sf_best_move": "domain", "sf_wp_best": "redundant"}
     assert "sf_gap_2" not in rules                       # its partner material_own goes anyway
 

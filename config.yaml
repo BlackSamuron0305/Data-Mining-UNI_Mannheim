@@ -1,13 +1,13 @@
 # Settings of the project. Every script reads them from here; run everything with: uv run python -m src.pipeline
 
 data:
-  # Where to start. The chosen state is downloaded from our server, every step after it is computed:
-  #   raw           the Lichess month, nothing downloaded: compute steps 1-3
-  #   selected      the games after step 1 (selection): compute steps 2-3
-  #   preprocessed  the move tables after step 2 (preprocessing): compute step 3
-  #   transformed   the tables after step 3 (transformation), ready for the models
+  # Where to start. The chosen step is downloaded from our server, every step after it is computed:
+  #   raw                the Lichess month, nothing downloaded: compute steps 1-3
+  #   01_selection       the games after step 1: compute steps 2-3
+  #   02_preprocessing   the move tables after step 2: compute step 3
+  #   03_transformation  the tables after step 3, ready for the models
   start_with: raw
-  also_download: []          # earlier states to download as well, to look at them, e.g. [selected, preprocessed]
+  also_download: []          # earlier steps to download as well, to look at them, e.g. [01_selection]
   raw_from: lichess           # the raw month: lichess (public, about 30 GB) or server (our copy, needs the keys in .env)
   stockfish: download        # Stockfish columns in step 2: download (our results) or compute (about 250 core-hours)
 

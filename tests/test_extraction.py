@@ -9,10 +9,10 @@ import pytest
 from pgn_factory import lichess_game
 from src.common.pgn import win_prob
 
-extract = importlib.import_module("src.02_preprocessing.common.extract")
-leakage = importlib.import_module("src.02_preprocessing.common.leakage_check")
-false_predictors = importlib.import_module("src.02_preprocessing.common.false_predictors")
-engine = importlib.import_module("src.02_preprocessing.with_stockfish.engine")
+extract = importlib.import_module("src.02_preprocessing.extract")
+leakage = importlib.import_module("src.02_preprocessing.leakage_check")
+false_predictors = importlib.import_module("src.02_preprocessing.preprocess")
+engine = importlib.import_module("src.02_preprocessing.stockfish")
 
 EVALS = ["0.0", "0.0", "-3.00", "-3.00", "-3.00", "-3.00", "-3.00", "-3.00"]
 
