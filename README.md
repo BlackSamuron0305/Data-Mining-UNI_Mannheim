@@ -55,6 +55,8 @@ Copy `.env.example` to `.env`. It holds only the keys of our server (needed to d
     uv run python -m src.pipeline             # fills data/ up to step 3
     bash run_models.sh                        # steps 4 and 5: training and evaluation
 
+One step alone: `uv run python -m src.01_selection` or `uv run python -m src.02_preprocessing` (also with `--dry-run`) runs every part of that step in order, whatever `start_with` says; the earlier steps that `config.yaml` takes from our server are downloaded first.
+
 A step is skipped if its result is there and newer than everything it reads, so a stopped run continues and a change (e.g. of the filters in `src/settings.py`) recomputes only what depends on it; the cleanup also checks that it was made with the current filters. On a 16-core desktop the cleanup of the month takes about 20 minutes and the selections about a minute each; the extraction of the moves takes a few minutes per run.
 
 Every script also runs on its own (the sections below). What it needs and does not find, it downloads if `config.yaml` takes that step from our server; otherwise it stops and names the step to run first. Downloads are checked against their sha256 and go to the same folders as the computed files, so the later steps cannot tell the difference.
@@ -62,6 +64,8 @@ Every script also runs on its own (the sections below). What it needs and does n
 The server holds a copy of `data/01_selection/` to `data/03_transformation/` without the `work/` folders and the logs. `uv run python -m src.common.server list` shows what is there; `download` fetches the steps of `config.yaml` (or the ones named, e.g. `download 02_preprocessing/stockfish`). `upload 01_selection|02_preprocessing|03_transformation` puts a step computed on this computer there and needs a key that may write.
 
 ## Data selection
+
+All of step 1 at once: `uv run python -m src.01_selection`. The parts on their own, in order:
 
     uv run python -m src.01_selection.raw.download 2026-09                          # the raw file of September 2026 into data/00_raw/september/ (about 30 GB, checked against Lichess's sha256)
     uv run python -m src.01_selection.raw.download 2026-08                          # the same for August 2026
@@ -78,6 +82,8 @@ The server holds a copy of `data/01_selection/` to `data/03_transformation/` wit
 Every selection writes its games (PGN and `games.csv` with each game's chance to be picked and its weight), tables and a `summary.md`. The later steps use the selection named by `IE500_SELECTION` (default `stratified`).
 
 ## Preprocessing
+
+All of step 2 at once, for both runs: `uv run python -m src.02_preprocessing`. The parts on their own, in order:
 
     uv run python -m src.02_preprocessing.moves.extract          # one row per move with every column, incl. the false predictors, into data/02_preprocessing/work/<selection>/
     uv run python -m src.02_preprocessing.moves.leakage_check    # the kept columns are known before the move; the false predictors are not

@@ -1,8 +1,9 @@
 # 02 Preprocessing
 
 The selected games become one row per move, with every column known before the move. One table per selection,
-written to `data/02_preprocessing/<selection>/`. Three folders, the scripts in the order they run
-(`src/pipeline.py` runs them for you):
+written to `data/02_preprocessing/<selection>/`. Three folders, the scripts in the order they run.
+`uv run python -m src.02_preprocessing` runs all of them for both runs (`__main__.py`, with the order and the checks
+of `src/pipeline.py`), skipping those whose results are there and up to date:
 
 | folder | script | what it does |
 |---|---|---|

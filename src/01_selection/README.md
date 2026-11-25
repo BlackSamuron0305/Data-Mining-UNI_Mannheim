@@ -2,7 +2,8 @@
 
 The raw Lichess month becomes the games we work with: one pass over the month, the blunder probability of every
 bucket, and three selections of 350,000 games, each split into training and test games. Four folders, the scripts
-in the order they run (`src/pipeline.py` runs them for you):
+in the order they run. `uv run python -m src.01_selection` runs all of them (`__main__.py`, with the order and the
+checks of `src/pipeline.py`), skipping those whose results are there and up to date:
 
 | folder | script | what it does | writes to `data/` |
 |---|---|---|---|

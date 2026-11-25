@@ -2,6 +2,8 @@
 it, up to step 3 (transformation). Steps 4 and 5 follow with: bash run_models.sh
 
 Usage:  uv run python -m src.pipeline [--dry-run]
+        uv run python -m src.01_selection [--dry-run]       step 1 alone (its __main__.py)
+        uv run python -m src.02_preprocessing [--dry-run]   step 2 alone
 
 A part is skipped if its result is there and newer than everything it reads; so a stopped run continues, and after
 a change only the parts that depend on it run again. Steps 2 and 3 run for the stratified run and for the balanced
@@ -19,7 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.config import (CFG, COMPARISON_DIR, DATA, DOWNLOADED, MONTH_DIR, MONTH_NAMES, PREPROCESSING_ROOT, RAW_FROM,
-                        SELECTION_ROOT, SELECTIONS, START_WITH, STATES, STOCKFISH, STOCKFISH_DIR, TRANSFORMATION_ROOT)
+                        SELECTION_ROOT, SELECTIONS, START_WITH, STATES, STEPS, STOCKFISH, STOCKFISH_DIR,
+                        TRANSFORMATION_ROOT)
 
 filters = importlib.import_module("src.01_selection.month.filters")
 RUNS = ["stratified", "stratified_balanced"]
@@ -144,30 +147,41 @@ def run_step(step: Step) -> None:
     print(f"--- {step.key} done in {(time.time() - t0) / 60:.1f} min")
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dry-run", action="store_true", help="only show what would be downloaded and computed")
-    args = ap.parse_args()
+def plan(only: str | None = None) -> tuple[list[str], list[str]]:
+    """The steps computed here and the steps downloaded first. Without `only`, as data: in config.yaml says. With a
+    step as `only` (e.g. 01_selection), that step is computed whatever data.start_with says, after the earlier steps
+    that config.yaml takes from our server."""
+    if only is None:
+        return STATES[STATES.index(START_WITH) + 1:], DOWNLOADED
+    if only not in STEPS:
+        raise ValueError(f"unknown step {only!r}: one of {', '.join(STEPS)}")
+    return [only], [s for s in DOWNLOADED if STEPS.index(s) < STEPS.index(only)]
 
-    later = STATES[STATES.index(START_WITH) + 1:]
+
+def run(only: str | None = None, dry_run: bool = False) -> None:
+    """Download what plan() says, then run every part that is not done, in order."""
+    computed, downloaded = plan(only)
     every = steps()
-    todo = [s for s in every.values() if s.state in later]
+    todo = [s for s in every.values() if s.state in computed]
     keys = {s.key for s in todo}
-    print(f"start with: {START_WITH}; downloaded: {', '.join(DOWNLOADED) or 'nothing'}; "
-          f"computed: {', '.join(later) or 'nothing'}")
-    if START_WITH == "raw":
+    if only is None:
+        print(f"start with: {START_WITH}; downloaded: {', '.join(downloaded) or 'nothing'}; "
+              f"computed: {', '.join(computed) or 'nothing'}")
+    else:
+        print(f"computed: {only}; downloaded first: {', '.join(downloaded) or 'nothing'}")
+    if "01_selection" in computed:
         print(f"raw month from {RAW_FROM}")
-    if "02_preprocessing" in later:
+    if "02_preprocessing" in computed:
         print(f"Stockfish columns: {STOCKFISH}")
     for step in todo:
         mark = "always" if step.always else "done" if is_done(step, every, keys) else "to do"
         print(f"  [{mark:6s}] {step.key}")
-    if args.dry_run:
+    if dry_run:
         return
 
-    if DOWNLOADED:
+    if downloaded:
         from src.common.server import download
-        download(DOWNLOADED)
+        download(downloaded)
     if START_WITH != "raw" and (MONTH_DIR / "cleanup.json").exists() and not cleanup_matches():
         sys.exit("the selected games on this computer come from a cleanup with other filters than src/settings.py: "
                  "start with raw, or download a step made with the current filters")
@@ -177,7 +191,24 @@ def main() -> None:
             continue
         print(f"--- {step.key}: python -m {step.module} {' '.join(step.args)}".rstrip())
         run_step(step)
-    print("data/ is ready up to step 3. Next: bash run_models.sh (training and evaluation)")
+    if only is None:
+        print("data/ is ready up to step 3. Next: bash run_models.sh (training and evaluation)")
+    else:
+        print(f"{only} is done: {DATA.name}/{only}/")
+
+
+def step_main(step: str) -> None:
+    """The command of one step (python -m src.<step>, its __main__.py): its parts in order, skipping those done."""
+    ap = argparse.ArgumentParser(description=f"Run step {step}: every part in order; a part whose result is there "
+                                             "and newer than what it reads is skipped.")
+    ap.add_argument("--dry-run", action="store_true", help="only show what would be downloaded and computed")
+    run(step, ap.parse_args().dry_run)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dry-run", action="store_true", help="only show what would be downloaded and computed")
+    run(dry_run=ap.parse_args().dry_run)
 
 
 if __name__ == "__main__":
