@@ -1,7 +1,7 @@
 """Step 2.2: Stockfish on the position before every move (how hard is the choice the mover faces?). Takes about 15
 hours on 16 cores; with data.stockfish: download in config.yaml our results are downloaded instead (README.md).
 
-Usage:  uv run python -m src.02_preprocessing.stockfish [train|test ...] [--merge]
+Usage:  uv run python -m src.02_preprocessing.engine.stockfish [train|test ...] [--merge]
 Output: data/02_preprocessing/stockfish/train.parquet, test.parquet, engine.json: one row per analysed move, of every
         selection. While it runs: one file per batch of games in data/02_preprocessing/work/stockfish/<part>/.
         IE500_SHARD="i/n" does only every n-th batch; after the last shard, --merge adds the batches to the result.

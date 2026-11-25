@@ -13,7 +13,7 @@ The test part is balanced in both runs (the same games); the training part only 
 import numpy as np
 
 from src.config import SEED
-from .sampling import TEST_FRAC
+from .draw import TEST_FRAC
 
 TRIES = 32                   # spare games compared per proposal
 PATIENCE = 20_000            # proposals in a row without a better swap before the search stops

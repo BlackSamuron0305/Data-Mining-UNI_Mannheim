@@ -9,10 +9,10 @@ import pandas as pd
 from src.config import CFG, MONTH_DIR, POOL_DIR
 from src.common.server import ensure
 from src.common.buckets import N_B, uniform
-from .filters import same_filters
+from ..month.filters import same_filters
 
 TEST_FRAC = CFG["selection"]["test_frac"]
-CLEANUP_STEP = "the cleanup (python -m src.01_selection.cleanup)"
+CLEANUP_STEP = "the cleanup (python -m src.01_selection.month.cleanup)"
 
 
 class Entries:

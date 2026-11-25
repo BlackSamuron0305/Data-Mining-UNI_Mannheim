@@ -1,7 +1,7 @@
 """Step 1.5: the three selections against the month, bucket by bucket, and fresh stratified draws that show how far
 a selection strays from the month by chance.
 
-Usage:  uv run python -m src.01_selection.compare   (after the selections and the blunder rates)
+Usage:  uv run python -m src.01_selection.comparison.compare   (after the selections and the blunder rates)
 Output: data/01_selection/comparison/: summary.md, comparison.json, buckets.csv, by_time_left.csv, weights.csv;
         figures from compare_report.ipynb
 """
@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd
 
 from src.config import CFG, COMPARISON_DIR, MONTH_DIR, SEED, SELECTION_ROOT, SELECTIONS, log_path, setup_log
-from .intervals import add_rates
-from .rates import by_time_left
-from .sampling import Pool, draw_stratified, test_part
+from ..month.intervals import add_rates
+from ..month.rates import by_time_left
+from ..sampling.draw import Pool, draw_stratified, test_part
 
 log = logging.getLogger("comparison")
 PARTS = ("train", "test")

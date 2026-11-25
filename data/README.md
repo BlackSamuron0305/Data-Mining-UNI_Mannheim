@@ -34,12 +34,12 @@ to the server.
 
 ## 01_selection
 
-- `00_raw/<month>/` comes from `src/01_selection/download.py`.
-- `<month>/` comes from `cleanup.py`: `cleanup.json`, `funnel.csv` (games after each filter step), `groups.csv` and
-  `buckets.csv` (counts of the month); and from `rates.py`: `rates.csv` (blunder probability of every bucket, with
-  its 95% interval and the probability the baseline predicts), `by_time_left.csv`, `summary.md`, and `figures/` from
-  `rates_plots.ipynb`. The pool (`pool.parquet`, `pool_buckets.parquet`) goes to `work/`.
-- `<selection>/` comes from `select.py --run <selection>`:
+- `00_raw/<month>/` comes from `src/01_selection/raw/download.py`.
+- `<month>/` comes from `month/cleanup.py`: `cleanup.json`, `funnel.csv` (games after each filter step), `groups.csv`
+  and `buckets.csv` (counts of the month); and from `month/rates.py`: `rates.csv` (blunder probability of every
+  bucket, with its 95% interval and the probability the baseline predicts), `by_time_left.csv`, `summary.md`, and
+  `figures/` from `month/rates_plots.ipynb`. The pool (`pool.parquet`, `pool_buckets.parquet`) goes to `work/`.
+- `<selection>/` comes from `sampling/select.py --run <selection>`:
 
       summary.md            the main numbers; start here
       selection.json        settings, balancing statistics, totals
@@ -49,20 +49,21 @@ to the server.
       groups.csv            games per group (speed x Elo of the mean rating), with its chance and weight
       buckets.csv           moves and blunders per bucket (speed x Elo of the mover x time left)
 
-- `comparison/` comes from `compare.py`: `summary.md`, `comparison.json`, `buckets.csv` (rates and z per bucket of
-  every selection), `by_time_left.csv`, `weights.csv`, and `figures/` from `compare_report.ipynb`; and from
-  `months.py`: `months.csv` and `months.md` (blunder probability of September and August).
+- `comparison/` comes from `comparison/compare.py`: `summary.md`, `comparison.json`, `buckets.csv` (rates and z per
+  bucket of every selection), `by_time_left.csv`, `weights.csv`, and `figures/` from `comparison/compare_report.ipynb`;
+  and from `comparison/months.py`: `months.csv` and `months.md` (blunder probability of September and August).
 
 ## 02_preprocessing
 
 - `<selection>/` comes from `src/02_preprocessing/`: `train.parquet` and `test.parquet` (one row per move, what step 3
   reads), `removed.csv` (every removed column, its rule and the measured numbers), `kept.csv` (the columns kept
   whatever the numbers say), `false_predictors.csv`, `extract.json`. The stratified run also has `leakage_check.json`
-  and `inspection/` (columns with their information about blunders, correlations, `figures/` from `report.ipynb`);
+  and `inspection/` (columns with their information about blunders, correlations, `figures/` from
+  `reduction/report.ipynb`);
   the balanced run takes its decisions.
 - The tables hold the Stockfish columns (`sf_*`). A model without Stockfish leaves them out; the reduction makes sure
   that this is exactly the table without Stockfish.
-- `stockfish/` comes from `stockfish.py` or our server: `train.parquet`, `test.parquet` (one row per analysed move of
+- `stockfish/` comes from `engine/stockfish.py` or our server: `train.parquet`, `test.parquet` (one row per analysed move of
   every selection) and `engine.json` (engine and settings).
 - `work/<selection>/` holds `extracted_<part>.parquet` (every column, incl. the false predictors) and
   `clean_<part>.parquet` (false predictors removed, Stockfish columns added); `work/stockfish/` the batches.

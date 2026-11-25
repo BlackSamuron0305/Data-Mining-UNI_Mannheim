@@ -7,7 +7,7 @@
   stratified_balanced  the same draw and split, with the training games balanced as well; its test games are the
                        same as in the stratified run, so both runs are scored on the same games
 
-Usage:  uv run python -m src.01_selection.select --run random|stratified|stratified_balanced   (after the cleanup)
+Usage:  uv run python -m src.01_selection.sampling.select --run random|stratified|stratified_balanced   (after the cleanup)
 Output: data/01_selection/<run>/ (see write.py)
 """
 import argparse
@@ -18,7 +18,7 @@ import numpy as np
 
 from src.config import CFG, SELECTION_ROOT, SELECTIONS, log_path, setup_log
 from src.common.buckets import uniform
-from .sampling import Pool, chance_by_group, draw_random, draw_stratified, same_chance, test_part
+from .draw import Pool, chance_by_group, draw_random, draw_stratified, same_chance, test_part
 from .swap import balance_part
 from .write import make_games, write_selection
 

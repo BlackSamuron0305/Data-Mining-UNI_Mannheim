@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-inspection = importlib.import_module("src.02_preprocessing.inspection")
-reduction = importlib.import_module("src.02_preprocessing.reduce")
+inspection = importlib.import_module("src.02_preprocessing.reduction.inspection")
+reduction = importlib.import_module("src.02_preprocessing.reduction.reduce")
 
 
 def test_mutual_information():

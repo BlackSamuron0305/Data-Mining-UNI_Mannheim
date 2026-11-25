@@ -21,7 +21,7 @@ from pathlib import Path
 from src.config import (CFG, COMPARISON_DIR, DATA, DOWNLOADED, MONTH_DIR, MONTH_NAMES, PREPROCESSING_ROOT, RAW_FROM,
                         SELECTION_ROOT, SELECTIONS, START_WITH, STATES, STOCKFISH, STOCKFISH_DIR, TRANSFORMATION_ROOT)
 
-filters = importlib.import_module("src.01_selection.filters")
+filters = importlib.import_module("src.01_selection.month.filters")
 RUNS = ["stratified", "stratified_balanced"]
 # a second month, only counted, to compare its blunder probability with ours
 OTHER = CFG["compare_month"]
@@ -61,24 +61,24 @@ class Step:
 
 def steps() -> dict[str, Step]:
     sel = "01_selection"
-    out = [Step(sel, "cleanup of the month", "src.01_selection.cleanup", None,
+    out = [Step(sel, "cleanup of the month", "src.01_selection.month.cleanup", None,
                 lambda: mtime(MONTH_DIR / "cleanup.json"), ok=cleanup_matches),
-           Step(sel, "blunder rates", "src.01_selection.rates", None,
+           Step(sel, "blunder rates", "src.01_selection.month.rates", None,
                 lambda: mtime(MONTH_DIR / "rates.csv"), ["cleanup of the month"])]
     for s in SELECTIONS:
-        out.append(Step(sel, f"{s} selection", "src.01_selection.select", None,
+        out.append(Step(sel, f"{s} selection", "src.01_selection.sampling.select", None,
                         lambda s=s: mtime(SELECTION_ROOT / s / "selection.json"), ["cleanup of the month"],
                         args=["--run", s]))
-    out.append(Step(sel, "comparison of the selections", "src.01_selection.compare", None,
+    out.append(Step(sel, "comparison of the selections", "src.01_selection.comparison.compare", None,
                     lambda: mtime(COMPARISON_DIR / "comparison.json"),
                     ["blunder rates"] + [f"{s} selection" for s in SELECTIONS]))
     month = {"IE500_MONTH": OTHER}
-    out += [Step(sel, f"cleanup of {OTHER} (counts only)", "src.01_selection.cleanup", None,
+    out += [Step(sel, f"cleanup of {OTHER} (counts only)", "src.01_selection.month.cleanup", None,
                  lambda: mtime(OTHER_DIR / "cleanup.json"), ok=lambda: cleanup_matches(OTHER_DIR / "cleanup.json"),
                  env=month, args=["--no-pool"]),
-            Step(sel, f"blunder rates of {OTHER}", "src.01_selection.rates", None,
+            Step(sel, f"blunder rates of {OTHER}", "src.01_selection.month.rates", None,
                  lambda: mtime(OTHER_DIR / "rates.csv"), [f"cleanup of {OTHER} (counts only)"], env=month),
-            Step(sel, "blunder rates by month", "src.01_selection.months", None,
+            Step(sel, "blunder rates by month", "src.01_selection.comparison.months", None,
                  lambda: mtime(COMPARISON_DIR / "months.csv"), ["blunder rates", f"blunder rates of {OTHER}"])]
 
     pre = "02_preprocessing"
@@ -86,27 +86,27 @@ def steps() -> dict[str, Step]:
         work = PREPROCESSING_ROOT / "work" / run
         final = PREPROCESSING_ROOT / run
         first = run == RUNS[0]
-        out.append(Step(pre, "extraction", "src.02_preprocessing.extract", run,
+        out.append(Step(pre, "extraction", "src.02_preprocessing.moves.extract", run,
                         lambda w=work: mtime(w / "extracted_test.parquet"), [f"{run} selection"]))
         # the balanced run takes the leakage check and the column decisions of the stratified run
         if first:
             check = final / "leakage_check.json"
-            out.append(Step(pre, "leakage check", "src.02_preprocessing.leakage_check", run,
+            out.append(Step(pre, "leakage check", "src.02_preprocessing.moves.leakage_check", run,
                             lambda c=check: mtime(c), [f"extraction ({run})"], ok=lambda c=check: leakage_checked(c)))
         reads = [f"extraction ({run})"]
         if STOCKFISH == "compute":
-            out.append(Step(pre, "Stockfish", "src.02_preprocessing.stockfish", run,
+            out.append(Step(pre, "Stockfish", "src.02_preprocessing.engine.stockfish", run,
                             lambda: mtime(STOCKFISH_DIR / "test.parquet"), [f"{run} selection"], always=True))
             reads.append(f"Stockfish ({run})")
-        out.append(Step(pre, "preprocess", "src.02_preprocessing.preprocess", run,
+        out.append(Step(pre, "preprocess", "src.02_preprocessing.moves.preprocess", run,
                         lambda w=work: mtime(w / "clean_test.parquet"), reads))
         if first:
-            out.append(Step(pre, "inspection", "src.02_preprocessing.inspection", run,
+            out.append(Step(pre, "inspection", "src.02_preprocessing.reduction.inspection", run,
                             lambda f=final: mtime(f / "inspection" / "inspection.json"), [f"preprocess ({run})"]))
             reads = [f"inspection ({run})"]
         else:
             reads = [f"preprocess ({run})", f"reduce ({RUNS[0]})"]
-        out.append(Step(pre, "reduce", "src.02_preprocessing.reduce", run,
+        out.append(Step(pre, "reduce", "src.02_preprocessing.reduction.reduce", run,
                         lambda f=final: mtime(f / "removed.csv"), reads))
 
     for run in RUNS:

@@ -3,7 +3,7 @@ import importlib
 
 import pandas as pd
 
-months = importlib.import_module("src.01_selection.months")
+months = importlib.import_module("src.01_selection.comparison.months")
 
 
 def fake_rates(folder, moves, blunders):

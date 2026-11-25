@@ -3,7 +3,7 @@
 This includes the columns that are only known after the move or after the game (false predictors). They are
 removed in the next step, so that the removal is visible.
 
-Usage:  uv run python -m src.02_preprocessing.extract [train|test ...]
+Usage:  uv run python -m src.02_preprocessing.moves.extract [train|test ...]
 Output: data/02_preprocessing/work/<selection>/extracted_train.parquet, extracted_test.parquet;
         data/02_preprocessing/<selection>/extract.json
 """
@@ -281,7 +281,7 @@ def features_batch(texts: tuple[str, ...]) -> tuple[pd.DataFrame, int]:
 
 
 def run_part(part: str) -> dict:
-    src = ensure(SELECTION_DIR / f"{part}.pgn.zst", "the selection (python -m src.01_selection.select)")
+    src = ensure(SELECTION_DIR / f"{part}.pgn.zst", "the selection (python -m src.01_selection.sampling.select)")
     out = OUT_DIR / f"extracted_{part}.parquet"
     tmp = OUT_DIR / f"extracted_{part}.parquet.part"
     t0 = time.time()

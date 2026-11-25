@@ -7,9 +7,9 @@ import pytest
 
 from src.common.buckets import N_B
 
-sampling = importlib.import_module("src.01_selection.sampling")
+sampling = importlib.import_module("src.01_selection.sampling.draw")
 split = entries = weights = sampling
-swap = importlib.import_module("src.01_selection.swap")
+swap = importlib.import_module("src.01_selection.sampling.swap")
 
 
 def test_allocate_is_proportional_and_exact():

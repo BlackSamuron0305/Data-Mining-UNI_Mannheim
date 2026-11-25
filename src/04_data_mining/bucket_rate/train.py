@@ -19,7 +19,7 @@ METHOD = "bucket_rate"
 
 
 def read_month():
-    path = ensure(MONTH_DIR / "rates.csv", "the blunder rates (python -m src.01_selection.rates)")
+    path = ensure(MONTH_DIR / "rates.csv", "the blunder rates (python -m src.01_selection.month.rates)")
     return pd.read_csv(path, index_col="bucket")
 
 

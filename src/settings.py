@@ -34,7 +34,7 @@ SETTINGS = {
         "marks": {"inaccuracy": 0.05, "mistake": 0.10, "blunder": 0.15},   # loss in win probability of the marks
     },
 
-    # step 2: which columns the reduction removes (src/02_preprocessing/common/reduction.py)
+    # step 2: which columns the reduction removes (src/02_preprocessing/reduction/reduce.py)
     "reduction": {
         "apply": True,                           # False: keep every column except the false predictors
         "inspection_games": 70_000,              # training games the inspection measures on (20% of the selection)

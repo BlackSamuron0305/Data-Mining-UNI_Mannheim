@@ -11,9 +11,9 @@ Stockfish columns, which may only remove Stockfish columns. So the table without
 exactly the table a model without Stockfish gets, and the models can show what Stockfish adds.
 
 The balanced run takes the decisions of the stratified run. With reduction.apply = False only the false predictors
-are gone (preprocess.py).
+are gone (moves/preprocess.py).
 
-Usage:  uv run python -m src.02_preprocessing.reduce   (after inspection.py; the balanced run: after the stratified run)
+Usage:  uv run python -m src.02_preprocessing.reduction.reduce   (after inspection.py; the balanced run: after the stratified run)
 Output: data/02_preprocessing/<selection>/train.parquet, test.parquet, removed.csv, kept.csv
 """
 import sys

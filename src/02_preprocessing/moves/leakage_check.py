@@ -1,7 +1,7 @@
 """Leakage check: cut games at a random move, change everything from that move on, and check that the features
 of the moves up to the cut stay the same. The false predictors must change, which shows that the check works.
 
-Usage:  uv run python -m src.02_preprocessing.leakage_check [--games 300] [--engine 5] [--pgn FILE]
+Usage:  uv run python -m src.02_preprocessing.moves.leakage_check [--games 300] [--engine 5] [--pgn FILE]
 Output: data/02_preprocessing/<selection>/leakage_check.json
 """
 from __future__ import annotations
@@ -112,7 +112,7 @@ def main() -> None:
 
     engine_leaks = {}
     if engine_pairs:
-        from .stockfish import analyse_texts
+        from ..engine.stockfish import analyse_texts
         for pgn, cut_pgn, n in engine_pairs:
             full = analyse_texts([pgn])
             cut = analyse_texts([cut_pgn])

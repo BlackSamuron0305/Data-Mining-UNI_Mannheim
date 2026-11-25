@@ -1,11 +1,11 @@
 """Step 2.3: remove the false predictors from the extracted moves and add the Stockfish columns.
 
-Usage:  uv run python -m src.02_preprocessing.preprocess   (after extract.py, and stockfish.py or its download)
+Usage:  uv run python -m src.02_preprocessing.moves.preprocess   (after extract.py, and engine/stockfish.py or its download)
 Output: data/02_preprocessing/work/<selection>/clean_train.parquet, clean_test.parquet;
         data/02_preprocessing/<selection>/false_predictors.csv
 
 The Stockfish columns come from data/02_preprocessing/stockfish/: downloaded from our server (data.stockfish:
-download in config.yaml) or computed by stockfish.py (data.stockfish: compute).
+download in config.yaml) or computed by engine/stockfish.py (data.stockfish: compute).
 """
 import logging
 import sys
@@ -56,7 +56,7 @@ def stockfish_table(part: str):
     path = STOCKFISH_DIR / f"{part}.parquet"
     if not path.exists():
         if STOCKFISH == "compute":
-            sys.exit(f"{path} is missing: run uv run python -m src.02_preprocessing.stockfish first")
+            sys.exit(f"{path} is missing: run uv run python -m src.02_preprocessing.engine.stockfish first")
         print("no Stockfish columns on this computer: downloading them from our server")
         download([STOCKFISH_DIR.relative_to(PREPROCESSING_ROOT.parent).as_posix()])
     return pq.read_table(path)
@@ -68,7 +68,7 @@ def run() -> None:
     for part in PARTS:
         src = PREPROCESSING_WORK / f"extracted_{part}.parquet"
         if not src.exists():
-            sys.exit(f"{src} is missing: run uv run python -m src.02_preprocessing.extract first")
+            sys.exit(f"{src} is missing: run uv run python -m src.02_preprocessing.moves.extract first")
         names = [c for c in pq.read_schema(src).names if c not in FALSE_PREDICTORS]
         moves = pq.read_table(src, columns=names)
         table = moves.join(stockfish_table(part), keys=KEYS, join_type="left outer")
@@ -77,7 +77,7 @@ def run() -> None:
         if missing:
             games = len(set(table.filter(table["sf_wp_best"].is_null())["game_id"].to_pylist()))
             sys.exit(f"{part}: {missing:,} moves of {games:,} games have no Stockfish columns (results of an older "
-                     "selection?): run uv run python -m src.02_preprocessing.stockfish, which analyses only the "
+                     "selection?): run uv run python -m src.02_preprocessing.engine.stockfish, which analyses only the "
                      "missing games")
         pq.write_table(table, PREPROCESSING_WORK / f"clean_{part}.parquet", compression="zstd")
         log.info("%s: %s moves, %d false predictors removed, Stockfish columns added", part,

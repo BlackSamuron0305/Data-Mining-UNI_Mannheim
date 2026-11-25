@@ -1,7 +1,7 @@
 """Step 1.3: the blunder probability of every bucket of the month, with its 95% interval and the probability the
 baseline predicts (small buckets pulled towards their speed x Elo rate).
 
-Usage:  uv run python -m src.01_selection.rates   (after the cleanup; IE500_MONTH for August)
+Usage:  uv run python -m src.01_selection.month.rates   (after the cleanup; IE500_MONTH for August)
 Output: data/01_selection/<month>/: rates.csv, by_time_left.csv, summary.md; figures from rates_plots.ipynb
 """
 import json
@@ -18,7 +18,7 @@ from .filters import same_filters
 from .intervals import add_rates
 
 log = logging.getLogger("blunder_rates")
-CLEANUP_STEP = "the cleanup (python -m src.01_selection.cleanup)"
+CLEANUP_STEP = "the cleanup (python -m src.01_selection.month.cleanup)"
 
 
 # Blunder rate of every bucket, with the baseline rate

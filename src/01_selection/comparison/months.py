@@ -3,8 +3,8 @@
 A model learns the blunder probability of its month. If another month has another one, the model's probabilities
 are off by that much there: a monthly bias.
 
-Usage:  uv run python -m src.01_selection.months   (after rates.py of both months)
-Output: data/01_selection/comparison/months.csv, months.md; figures from rates_plots.ipynb
+Usage:  uv run python -m src.01_selection.comparison.months   (after month/rates.py of both months)
+Output: data/01_selection/comparison/months.csv, months.md; figures from month/rates_plots.ipynb
 """
 import sys
 
@@ -12,7 +12,7 @@ import pandas as pd
 
 from src.config import CFG, COMPARISON_DIR, MONTH_NAMES, SELECTION_ROOT
 from src.common.buckets import SPEEDS
-from .intervals import add_rates
+from ..month.intervals import add_rates
 
 OUT_DIR = COMPARISON_DIR
 MONTHS = [CFG["month"], CFG["compare_month"]]

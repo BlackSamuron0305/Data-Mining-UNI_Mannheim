@@ -25,5 +25,5 @@ and quantile scaling). All of it is in `encoding.py`:
 XGBoost and gradient boosting take the categories and the gaps as they are.
 
 The new columns built from a game (clock left as a share of the starting time, win chance, earlier mistakes)
-are made in `src/02_preprocessing/extract.py`: the earlier mistakes are counted from the loss and the mark of every
+are made in `src/02_preprocessing/moves/extract.py`: the earlier mistakes are counted from the loss and the mark of every
 move, which are removed as false predictors right after the extraction.

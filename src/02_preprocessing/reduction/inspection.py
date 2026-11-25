@@ -1,7 +1,7 @@
 """Step 2.4: look at the columns of the moves to decide which ones can go: missing values, near-constant columns,
 how much every column tells about blunders, and which columns repeat each other. Only training games are looked at.
 
-Usage:  uv run python -m src.02_preprocessing.inspection   (after preprocess.py; the stratified run only)
+Usage:  uv run python -m src.02_preprocessing.reduction.inspection   (after moves/preprocess.py; the stratified run only)
 Output: data/02_preprocessing/<selection>/inspection/: columns.csv, correlation.csv, pairs.csv, categories.csv,
         inspection.json; look at it in report.ipynb
 """

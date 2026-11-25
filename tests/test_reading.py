@@ -8,8 +8,8 @@ import pytest
 
 from pgn_factory import lichess_game
 
-storage = importlib.import_module("src.01_selection.storage")
-cleanup = importlib.import_module("src.01_selection.cleanup")
+storage = importlib.import_module("src.01_selection.raw.storage")
+cleanup = importlib.import_module("src.01_selection.month.cleanup")
 SKIPPABLE = (0x184D2A50).to_bytes(4, "little")
 
 

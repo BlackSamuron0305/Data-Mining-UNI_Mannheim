@@ -1,8 +1,8 @@
 """Step 1.2: one pass over the month. Keeps the complete cases, counts the moves and blunders of every bucket and
 group, and keeps a share of the games as the pool that the selections draw from.
 
-Usage:  uv run python -m src.01_selection.cleanup
-        IE500_MONTH=2026-08 uv run python -m src.01_selection.cleanup --no-pool   (August)
+Usage:  uv run python -m src.01_selection.month.cleanup
+        IE500_MONTH=2026-08 uv run python -m src.01_selection.month.cleanup --no-pool   (August)
 Output: data/01_selection/<month>/: cleanup.json, funnel.csv, groups.csv, buckets.csv;
         data/01_selection/work/: pool.parquet, pool_buckets.parquet
 """
@@ -23,7 +23,7 @@ import pyarrow.parquet as pq
 
 from src.config import (CFG, MONTH, MONTH_DIR, MONTH_NAMES, POOL_DIR, SEED, SELECTION_ROOT, WORKERS, log_path,
                         setup_log)
-from .storage import MonthFile
+from ..raw.storage import MonthFile
 from src.common.buckets import (B_OFF, N_B, N_E, N_G, N_W, SPEEDS, WIN, elo_label, game_group, move_buckets,
                                 uniform)
 from .filters import FILTERS, STEPS, complete_game, split_games
@@ -82,7 +82,7 @@ def clean_text(text: str, rate: float) -> dict:
     bucket_of_move, bucket_of_blunder, buckets_of_game = [], [], []
     # the month, per game: its group, moves and blunders
     group_of_game, moves_of_game, blunders_of_game = [], [], []
-    # the pool: its games, and their entries (see Entries in sampling.py)
+    # the pool: its games, and their entries (see Entries in sampling/draw.py)
     pool, entry_row, entry_bucket, entry_moves, entry_blunders = [], [], [], [], []
     for chunk in split_games(text):
         game = complete_game(chunk, funnel)

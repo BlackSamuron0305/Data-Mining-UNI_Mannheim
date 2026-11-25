@@ -9,7 +9,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from src.config import CFG, MONTH, POOL_DIR, SEED, SELECTION_ROOT
-from .sampling import TEST_FRAC
+from .draw import TEST_FRAC
 
 N = CFG["selection"]["n_games"]
 MIN_GAMES = CFG["selection"]["min_games"]

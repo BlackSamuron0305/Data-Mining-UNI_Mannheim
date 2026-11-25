@@ -7,12 +7,15 @@ IE500 Data Mining, University of Mannheim. Team 5: Predicting Blunders in Online
 - `IE500_DM_StudentProject.pdf`: the course's project description
 - `submission/`: proposal, final paper and presentation (LaTeX)
 - `src/`: the code in the five steps of the data mining process (Fayyad et al., 1996); `src/settings.py` holds the fixed settings of the method, `config.yaml` what can be chosen (where the data comes from, the number of processes), and `src/pipeline.py` runs steps 1 to 3 as `config.yaml` says
-  - `src/01_selection/`: getting the data and choosing the games, one file per task
-    - `download.py` and `storage.py`: the raw month, from our server or from Lichess
-    - `cleanup.py` (with `filters.py`): one pass over the month that drops unwanted games, counts moves and blunders per bucket and keeps a pool of games
-    - `rates.py` (with `rates_plots.ipynb`): the blunder probability per bucket of the month; `months.py` compares September with August, the only use of August: the blunder probability changes from month to month (a monthly bias)
-    - `select.py --run random|stratified|stratified_balanced`: the three selections, with what they share in `sampling.py`, `swap.py` and `write.py`; `compare.py` (with `compare_report.ipynb`): the three selections against the month, incl. the weights
-  - `src/02_preprocessing/`: the selected games turned into one table per selection with one row per move: `extract.py`, `leakage_check.py`, `stockfish.py`, `preprocess.py` (false predictors out, Stockfish columns in), `inspection.py`, `reduce.py` and `report.ipynb` (its `README.md`)
+  - `src/01_selection/`: getting the data and choosing the games, one folder per part (its `README.md`)
+    - `raw/`: `download.py` and `storage.py`, the raw month from our server or from Lichess
+    - `month/`: `cleanup.py` (with `filters.py`), one pass over the month that drops unwanted games, counts moves and blunders per bucket and keeps a pool of games; `rates.py` (with `intervals.py` and `rates_plots.ipynb`), the blunder probability per bucket of the month
+    - `sampling/`: `select.py --run random|stratified|stratified_balanced`, the three selections: the draw and the split in `draw.py`, the balancing in `swap.py`, the files in `write.py`
+    - `comparison/`: `compare.py` (with `compare_report.ipynb`), the three selections against the month, incl. the weights; `months.py`, September against August, the only use of August: the blunder probability changes from month to month (a monthly bias)
+  - `src/02_preprocessing/`: the selected games turned into one table per selection with one row per move, one folder per part (its `README.md`)
+    - `moves/`: `extract.py` (one row per move), `leakage_check.py`, `preprocess.py` (false predictors out, Stockfish columns in)
+    - `engine/`: `stockfish.py`, Stockfish on the position before every move
+    - `reduction/`: `inspection.py`, `reduce.py` and `report.ipynb`, which columns we keep
   - `src/03_transformation/`: `transform.py` writes the tables the models read (fixed categories, 0/1, the held-out games); `encoding.py` holds what each model learns from the training games: gaps filled, numbers scaled, categories as 0/1 columns or as numbers for the trees (its `README.md`)
   - `src/04_data_mining/<method>/`: one folder per training method; `src/04_data_mining/common.py` holds what they share
   - `src/05_evaluation/`: scores every training run on the same moves
@@ -60,29 +63,29 @@ The server holds a copy of `data/01_selection/` to `data/03_transformation/` wit
 
 ## Data selection
 
-    uv run python -m src.01_selection.download 2026-09                   # the raw file of September 2026 into data/00_raw/september/ (about 30 GB, checked against Lichess's sha256)
-    uv run python -m src.01_selection.download 2026-08                   # the same for August 2026
-    IE500_MONTH=2026-08 uv run python -m src.01_selection.cleanup --no-pool   # August: counts only, for its blunder rates
-    IE500_MONTH=2026-08 uv run python -m src.01_selection.rates
-    uv run python -m src.01_selection.cleanup                            # one pass over the month into data/01_selection/september/ (about 20 minutes)
-    uv run python -m src.01_selection.rates                              # blunder probability per bucket into data/01_selection/september/; figures: rates_plots.ipynb
-    uv run python -m src.01_selection.months                             # after the rates of both months: September against August
-    uv run python -m src.01_selection.select --run random                # 350,000 games at random into data/01_selection/random/
-    uv run python -m src.01_selection.select --run stratified            # stratified by speed x Elo, test games balanced, into data/01_selection/stratified/
-    uv run python -m src.01_selection.select --run stratified_balanced   # the same, training games balanced too, into data/01_selection/stratified_balanced/
-    uv run python -m src.01_selection.compare                            # the three against the month into data/01_selection/comparison/; figures: compare_report.ipynb
+    uv run python -m src.01_selection.raw.download 2026-09                          # the raw file of September 2026 into data/00_raw/september/ (about 30 GB, checked against Lichess's sha256)
+    uv run python -m src.01_selection.raw.download 2026-08                          # the same for August 2026
+    IE500_MONTH=2026-08 uv run python -m src.01_selection.month.cleanup --no-pool   # August: counts only, for its blunder rates
+    IE500_MONTH=2026-08 uv run python -m src.01_selection.month.rates
+    uv run python -m src.01_selection.month.cleanup                                 # one pass over the month into data/01_selection/september/ (about 20 minutes)
+    uv run python -m src.01_selection.month.rates                                   # blunder probability per bucket into data/01_selection/september/; figures: month/rates_plots.ipynb
+    uv run python -m src.01_selection.comparison.months                             # after the rates of both months: September against August
+    uv run python -m src.01_selection.sampling.select --run random                  # 350,000 games at random into data/01_selection/random/
+    uv run python -m src.01_selection.sampling.select --run stratified              # stratified by speed x Elo, test games balanced, into data/01_selection/stratified/
+    uv run python -m src.01_selection.sampling.select --run stratified_balanced     # the same, training games balanced too, into data/01_selection/stratified_balanced/
+    uv run python -m src.01_selection.comparison.compare                            # the three against the month into data/01_selection/comparison/; figures: comparison/compare_report.ipynb
 
 Every selection writes its games (PGN and `games.csv` with each game's chance to be picked and its weight), tables and a `summary.md`. The later steps use the selection named by `IE500_SELECTION` (default `stratified`).
 
 ## Preprocessing
 
-    uv run python -m src.02_preprocessing.extract          # one row per move with every column, incl. the false predictors, into data/02_preprocessing/work/<selection>/
-    uv run python -m src.02_preprocessing.leakage_check    # the kept columns are known before the move; the false predictors are not
-    uv run python -m src.02_preprocessing.preprocess       # removes the 13 false predictors, adds the 15 Stockfish columns (data.stockfish: downloaded or computed)
-    uv run python -m src.02_preprocessing.inspection       # missing values, near-constant columns, correlations (training games only)
-    uv run python -m src.02_preprocessing.reduce           # removes the columns we do not need, by fixed rules; see report.ipynb
+    uv run python -m src.02_preprocessing.moves.extract          # one row per move with every column, incl. the false predictors, into data/02_preprocessing/work/<selection>/
+    uv run python -m src.02_preprocessing.moves.leakage_check    # the kept columns are known before the move; the false predictors are not
+    uv run python -m src.02_preprocessing.moves.preprocess       # removes the 13 false predictors, adds the 15 Stockfish columns (data.stockfish: downloaded or computed)
+    uv run python -m src.02_preprocessing.reduction.inspection   # missing values, near-constant columns, correlations (training games only)
+    uv run python -m src.02_preprocessing.reduction.reduce       # removes the columns we do not need, by fixed rules; see reduction/report.ipynb
 
-Results: `data/02_preprocessing/<selection>/train.parquet` and `test.parquet`, one table with the Stockfish columns (`sf_*`); a model without Stockfish leaves them out. The reduction follows fixed rules on the inspection of 70,000 training games (`src/02_preprocessing/reduce.py`, settings `reduction` in `src/settings.py`): *domain*: a column that follows from others or that a kept column covers (a written list); *redundant*: of two columns with |Spearman| ≥ 0.9 the one that tells less about blunders (mutual information); *weak*: less than 1% of what the best column tells. A short list of columns stays whatever the numbers say (`KEEP`, with reasons). The rules run first on the columns without Stockfish alone, then on the Stockfish columns, which may only remove Stockfish columns; so the table without its `sf_*` columns is exactly the table without Stockfish. The balanced run takes the stratified run's decisions. Every removed column, its rule and the measured numbers are in `removed.csv`, the kept exceptions in `kept.csv`. `reduction.apply: False` keeps every column but the false predictors. To run Stockfish yourself instead of downloading it: `src/02_preprocessing/README.md`.
+Results: `data/02_preprocessing/<selection>/train.parquet` and `test.parquet`, one table with the Stockfish columns (`sf_*`); a model without Stockfish leaves them out. The reduction follows fixed rules on the inspection of 70,000 training games (`src/02_preprocessing/reduction/reduce.py`, settings `reduction` in `src/settings.py`): *domain*: a column that follows from others or that a kept column covers (a written list); *redundant*: of two columns with |Spearman| ≥ 0.9 the one that tells less about blunders (mutual information); *weak*: less than 1% of what the best column tells. A short list of columns stays whatever the numbers say (`KEEP`, with reasons). The rules run first on the columns without Stockfish alone, then on the Stockfish columns, which may only remove Stockfish columns; so the table without its `sf_*` columns is exactly the table without Stockfish. The balanced run takes the stratified run's decisions. Every removed column, its rule and the measured numbers are in `removed.csv`, the kept exceptions in `kept.csv`. `reduction.apply: False` keeps every column but the false predictors. To run Stockfish yourself instead of downloading it: `src/02_preprocessing/README.md`.
 
 ## Transformation
 
@@ -98,18 +101,18 @@ The leakage check cuts sample games at a random move, scrambles everything Liche
 
 Every method has its own folder in `src/04_data_mining/`, every run writes `data/04_data_mining/<selection>/<method>/<name>/` (predictions of the held-out training games and of the test games, settings, model). Training reads the tables of step 3 (downloaded if `config.yaml` says so, see above). Feature sets: `basic` (speed, Elo, clock), `context` (every column of `data/03_transformation/<selection>/` but the Stockfish columns `sf_*`), `engine` (every column). The columns come from the tables, so a column removed in `reduce.py` is gone from training too. `bash run_models.sh` runs every training and validation of the paper.
 
-    uv run python -m src.04_data_mining.bucket_rate.train --source month               # baseline: the blunder probability of the move's bucket in the month
-    uv run python -m src.04_data_mining.bucket_rate.train --source train               # the same from the training games only
-    uv run python -m src.04_data_mining.baseline.train                                  # simpler baselines: overall rate, per speed, speed x Elo, win-probability band, after an opponent's mistake
-    uv run python -m src.04_data_mining.naive_bayes.train --features context            # lower reference among the learners
+    uv run python -m src.04_data_mining.bucket_rate.train --source month          # baseline: the blunder probability of the move's bucket in the month
+    uv run python -m src.04_data_mining.bucket_rate.train --source train          # the same from the training games only
+    uv run python -m src.04_data_mining.baseline.train                            # simpler baselines: overall rate, per speed, speed x Elo, win-probability band, after an opponent's mistake
+    uv run python -m src.04_data_mining.naive_bayes.train --features context      # lower reference among the learners
     uv run python -m src.04_data_mining.logistic_regression.train --features context
-    uv run python -m src.04_data_mining.svm.train --features context                    # linear SVM, probabilities by Platt scaling
-    uv run python -m src.04_data_mining.decision_tree.train --features context          # symbolic: tunes the depth, writes rules.txt
+    uv run python -m src.04_data_mining.svm.train --features context              # linear SVM, probabilities by Platt scaling
+    uv run python -m src.04_data_mining.decision_tree.train --features context    # symbolic: tunes the depth, writes rules.txt
     uv run python -m src.04_data_mining.random_forest.train --features context
     uv run python -m src.04_data_mining.gradient_boosting.train --features context
     uv run python -m src.04_data_mining.gradient_boosting.train --features engine
-    uv run python -m src.04_data_mining.xgboost.train --features context                # --device cuda for an NVIDIA GPU
-    uv run python -m src.04_data_mining.neural_network.train --features context         # early stopping on the held-out games
+    uv run python -m src.04_data_mining.xgboost.train --features context          # --device cuda for an NVIDIA GPU
+    uv run python -m src.04_data_mining.neural_network.train --features context   # early stopping on the held-out games
 
 Hyperparameters are command-line options (`--help` of each method); give every setting its own `--name`, e.g. `--C 0.1 --name context_C0.1`, and choose between them with the validation below. Why each method is there: Chapter 4 of the final paper.
 
@@ -117,10 +120,10 @@ Hyperparameters are command-line options (`--help` of each method); give every s
 
 ### Tuning, ablation, importance
 
-    uv run python -m src.04_data_mining.tune --method xgboost --features context        # Optuna search, then the best settings refitted as xgboost/context_tuned
+    uv run python -m src.04_data_mining.tune --method xgboost --features context       # Optuna search, then the best settings refitted as xgboost/context_tuned
     uv run python -m src.04_data_mining.tune --method gradient_boosting --sampler grid  # every combination of the paper's Table 4.2 instead
-    uv run python -m src.04_data_mining.ablation --method xgboost --features context    # every feature group left out, and alone: runs ablation/<method>_<features>_<variant>
-    uv run python -m src.04_data_mining.importance                                      # permutation importance by feature group of the best run (after the validation)
+    uv run python -m src.04_data_mining.ablation --method xgboost --features context   # every feature group left out, and alone: runs ablation/<method>_<features>_<variant>
+    uv run python -m src.04_data_mining.importance                                     # permutation importance by feature group of the best run (after the validation)
 
 The tuner fits every trial on a random subset of the fitting games (`tuning.tune_moves`, about 1 million moves) and scores it on the held-out games (`tuning.objective`, log loss; `--objective pr_auc` also works); every trial goes into `tuning.csv`. The best settings are then fitted on all fitting moves, except random forest, neural network and SVM, which get a random subset (`tuning.refit_max_moves` in `src/settings.py`). The ablation takes the settings of the tuned run if there is one. Methods: `naive_bayes`, `logistic_regression`, `decision_tree`, `random_forest`, `gradient_boosting`, `xgboost`, `neural_network`, `svm`.
 
@@ -138,11 +141,11 @@ Does balancing the training games help the models? The stratified run is the nor
 In Git Bash (in PowerShell set `$env:IE500_SELECTION = "stratified_balanced"` once instead):
 
     export IE500_SELECTION=stratified_balanced
-    uv run python -m src.01_selection.select --run stratified_balanced
-    uv run python -m src.02_preprocessing.extract
-    uv run python -m src.02_preprocessing.stockfish        # after the stratified run's engine: only the balanced run's new games
-    uv run python -m src.02_preprocessing.preprocess
-    uv run python -m src.02_preprocessing.reduce           # the same columns as the stratified run
+    uv run python -m src.01_selection.sampling.select --run stratified_balanced
+    uv run python -m src.02_preprocessing.moves.extract
+    uv run python -m src.02_preprocessing.engine.stockfish   # after the stratified run's engine: only the balanced run's new games
+    uv run python -m src.02_preprocessing.moves.preprocess
+    uv run python -m src.02_preprocessing.reduction.reduce   # the same columns as the stratified run
     uv run python -m src.03_transformation.transform
     uv run python -m src.04_data_mining.bucket_rate.train --source month
     uv run python -m src.04_data_mining.tune --method gradient_boosting --features context --params-from stratified --cv 0   # and every other run of the stratified run, same settings

@@ -7,7 +7,7 @@ import pytest
 
 from pgn_factory import FOOLS_MATE, lichess_game
 
-filters = importlib.import_module("src.01_selection.filters")
+filters = importlib.import_module("src.01_selection.month.filters")
 
 
 def keep(pgn: str):
