@@ -111,19 +111,19 @@
 \suppressfloats[t] % the report starts with its text, not with a figure or table
 
 Lichess, a free chess server, publishes every rated game played on it, 89,616,462 in September 2026 alone
-\cite{lichessdb}. Most are bullet and blitz games with a few minutes per player, and many are lost by a single
-bad move rather than won by the better plan. Lichess calls such a move a \emph{blunder}: it lowers the mover's
+\cite{lichessdb}. Many of these games are not won by better plans or tactics, but instead by the opponent 
+making one bad move. Lichess calls such a move a \emph{blunder}: it lowers the mover's
 chance of winning, a logistic function of the Stockfish evaluation \cite{lichessaccuracy}, by at least 15
 percentage points \cite{lichessadvice}; analysed games mark it with ``??''.
 
-An engine tells how good a position is under perfect play, not how likely a human of a given strength and with
-a given time left is to go wrong in it. Earlier work predicted which move a player of a given rating chooses
-\cite{mcilroyyoung2020maia}; we ask: \emph{Can a model predict whether a player will blunder on their next
+An engine tells how good a position is under perfect play. It does not tell how likely a human of a given 
+proficiency, with a given time left, is to go wrong in it. Earlier work predicted which move a player of a given rating chooses
+\cite{mcilroyyoung2020maia}; This project attempts to answer the question: \emph{Can a model predict whether a player will blunder on their next
 move, from what is known before it: clocks, position, evaluation, ratings and the course of the game?} Such a
 model could show players when they tend to blunder, show viewers how hard a position is for the humans at the
 board, and tell when decisions under time pressure fail.
 
-The target is the ``??'' of a move: binary classification of moves, with about \stale{5.5}\,\% blunders. Our
+The target is the ``??'' of a move: binary classification of moves, with about \stale{5.5}\,\% blunders. This project has 4 main
 goals: (1)~\emph{prediction}: beat the strongest simple baseline, the blunder rate per speed, rating and time
 left, in Average Precision and log loss on unseen games; (2)~\emph{explanation}: find which information
 carries the signal, in particular what an engine adds, with readable rules; (3)~\emph{robustness} across
@@ -199,8 +199,8 @@ Lichess derives the speed; \citealp{scalachessspeed}), the clock and the evaluat
 
 \textbf{Quality and target.} The file is written by the server, so ratings and clocks are numbers and moves are
 legal, which Chapter~\ref{ch:preprocessing} checks rather than assumes. Clocks are in almost every game, but
-evaluations and marks only in analysed ones, about 10\,\% of the month; a game without them has no label, which
-cannot be imputed, so it is dropped. Of the \stale{580} million moves of the complete games, \stale{5.51}\,\% are
+evaluations and marks only in analysed ones, about 10\,\% of the month; games without them have no label and
+cannot be imputed, so such games are dropped. Of the \stale{580} million moves of the complete games, \stale{5.51}\,\% are
 blunders (August: \tbd\,\%; a model learns the rate of its month, a \emph{monthly bias}). Never predicting a
 blunder, the majority class, is right on \stale{94.5}\,\% of the moves, so accuracy cannot judge our models. The
 rate depends on the situation (Figure~\ref{fig:rates}). In a first sample of \stale{945,171} moves it was
@@ -233,13 +233,12 @@ usable and which of them we draw (Figure~\ref{fig:selection}).
   \label{fig:selection}
 \end{figure}
 
-\textbf{Complete cases.} One pass over the month keeps the complete cases (Table~\ref{tab:funnel}), each filter
-for a reason: speed bullet to classical (Lichess's
-classes of the estimated duration; \citealp{scalachessspeed}), as ultrabullet leaves no time to think and
-correspondence no time pressure; evaluations present, as only analysed games have labels; both ratings known, as
-features and strata need them; no computer player, as we model humans; ended normally or on time, as abandoned
-games say nothing about decisions; at least one move, all legal, each with a clock and an evaluation (only a
-mating last move has none). We first also required 20 plies but dropped this filter: early resignations often
+\textbf{Complete cases.} One pass over the month keeps the complete cases (Table~\ref{tab:funnel}). We used the following filters: (1) 4 speeds from bullet to classical (Lichess's
+classes of the estimated duration; \citealp{scalachessspeed}). ultrabullet speed leaves no time to think and
+correspondence no time pressure, hence both were excluded; (2) evaluations present, as only analysed games have labels; (3) both ratings known, as
+features and strata need them; (4) no computer player, as we model humans; (5) ended normally or on time, as abandoned
+games say nothing about decisions; (6) overall moves (at least one move, all legal, each with a clock and an evaluation excluding a mating last move). 
+We first also required 20 plies (individual turns) but dropped this filter, as early resignations often
 follow early blunders, exactly the moves we want to predict.
 
 \begin{table}[tb]
