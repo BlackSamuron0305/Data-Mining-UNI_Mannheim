@@ -1,24 +1,23 @@
 """Hyperparameter search of a method on the held-out games, then a refit of the best settings as a normal run.
 
 Usage:  uv run python -m src.04_data_mining.tune --method METHOD [--features context] [--sampler tpe|grid] [--trials N]
-            [--objective log_loss] [--tune-moves N] [--cv K] [--params-from DATA_FOLDER] [--max-games N] [--name NAME]
+            [--objective log_loss] [--tune-moves N] [--cv K] [--params-from SELECTION] [--max-games N] [--name NAME]
 
 One fixed set of held-out games scores every trial; --cv K afterwards checks the best against the second-best
-settings on K folds. --params-from skips the search and refits the settings of the same run in another data folder.
+settings on K folds. --params-from skips the search and refits the settings of the same run of another selection.
 """
 import argparse
 import importlib
 import json
 import math
 import time
-from pathlib import Path
 
 import pandas as pd
 
-from src.config import ROOT, SEED
+from src.config import RUNS_ROOT, SEED
 from src.common.buckets import uniform
 from src.common.metrics import scores
-from .common import (FEATURE_SETS, TRAIN, TUNING, cap_moves, columns, folds, load, predictions, run_dir,
+from .common import (FEATURE_SETS, TUNING, cap_moves, columns, folds, load, predictions, run_dir,
                                  save_run, target)
 
 METHODS = ["naive_bayes", "logistic_regression", "decision_tree", "random_forest", "gradient_boosting", "xgboost",
@@ -173,9 +172,9 @@ def main():
                     help="fitting moves per trial (whole games); 0 = all")
     ap.add_argument("--cv", type=int, default=TUNING.get("cv_check", 0),
                     help="folds of the check of the best settings (0 = none)")
-    ap.add_argument("--params-from", metavar="DATA_FOLDER", default=None,
-                    help="no trials: refit the settings of the same run in this data folder (e.g. data)")
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--params-from", metavar="SELECTION", default=None,
+                    help="no trials: refit the settings of the same run of this selection (e.g. stratified)")
+    ap.add_argument("--max-games", type=int, default=None)
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
 
@@ -189,10 +188,7 @@ def main():
 
     fit_df, valid = folds(load("train", args.features, args.max_games))
     if args.params_from:
-        source = Path(args.params_from)
-        if not source.is_absolute():
-            source = ROOT / args.params_from
-        run_folder = source / "runs" / args.method / name
+        run_folder = RUNS_ROOT / args.params_from / args.method / name
         best = json.loads((run_folder / "run.json").read_text(encoding="utf-8"))["params"]
         table = pd.DataFrame()
         print(f"{args.method} on {args.features}: settings of {run_folder}: {best}")

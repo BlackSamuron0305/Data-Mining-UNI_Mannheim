@@ -1,6 +1,6 @@
 """Code shared by all training methods: feature sets, loading the moves, the fitted model and saving a run.
 
-Every run writes data/runs/<method>/<name>/ with run.json, predictions_valid.parquet, predictions_test.parquet
+Every run writes data/04_data_mining/<selection>/<method>/<name>/ with run.json, predictions_valid.parquet, predictions_test.parquet
 and, for methods with a model, model.joblib.
 """
 import importlib
@@ -14,23 +14,21 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
-from src.config import CFG, FINAL_DIRS, KEYS, RUNS_DIR, TARGET
+from src.config import BOOKKEEPING, CFG, KEYS, RUNS_DIR, STOCKFISH_PREFIX, TARGET, TRANSFORMATION_DIR
 from src.common.buckets import uniform
+from src.common.server import ensure
 
-category_coding = importlib.import_module("src.03_transformation.encoding.categories")
-boolean_coding = importlib.import_module("src.03_transformation.encoding.booleans")
-numeric_coding = importlib.import_module("src.03_transformation.encoding.numeric")
-tree_coding = importlib.import_module("src.03_transformation.encoding.trees")
-CATEGORICAL = category_coding.CATEGORICAL
-scaler = numeric_coding.scaler
+encoding = importlib.import_module("src.03_transformation.encoding")
+CATEGORICAL = encoding.CATEGORICAL
+scaler = encoding.scaler
 
-TRAIN = CFG["training"]
 TUNING = CFG["tuning"]
+PREDICT_BATCH = 2_000_000    # moves per prediction call, to keep the memory down
 
-# basic: three columns; context: every column of the final table without Stockfish; engine: of the one with it
+# basic: three columns; context: every column of the table but the Stockfish columns; engine: every column
 FEATURE_SETS = ["basic", "context", "engine"]
 BASIC = ["speed", "mover_elo", "clock"]
-BOOKKEEPING = KEYS + ["bucket", "group", TARGET]
+NOT_FEATURES = BOOKKEEPING + ["fold"]   # fold: the held-out training games (step 3)
 
 # Feature groups for the ablation and the importance; "game" gets every column not named elsewhere.
 GROUPS = {
@@ -46,19 +44,16 @@ GROUPS = {
 }
 
 
-def final_path(table, part):
-    path = FINAL_DIRS[table] / f"{part}.parquet"
-    if not path.exists():
-        share = importlib.import_module("src.common.server")
-        share.fetch("preprocessed", "src/02_preprocessing (README.md)")
-    return path
+def table_path(part):
+    """A table of step 3 (data/03_transformation/<selection>/<part>.parquet)."""
+    return ensure(TRANSFORMATION_DIR / f"{part}.parquet", "step 3 (python -m src.03_transformation.transform)")
 
 
 @cache
-def table_columns(table):
-    """The feature columns of a final table, in its order."""
-    names = pq.read_schema(final_path(table, "train")).names
-    return [c for c in names if c not in BOOKKEEPING]
+def table_columns():
+    """The feature columns of the table, in its order."""
+    names = pq.read_schema(table_path("train")).names
+    return [c for c in names if c not in NOT_FEATURES]
 
 
 def columns(cols):
@@ -66,24 +61,16 @@ def columns(cols):
     if cols == "basic":
         return list(BASIC)
     if cols == "context":
-        return table_columns("without_stockfish")
+        return [c for c in table_columns() if not c.startswith(STOCKFISH_PREFIX)]
     if cols == "engine":
-        return table_columns("with_stockfish")
+        return table_columns()
     if isinstance(cols, str):
         raise ValueError(f"unknown feature set {cols!r}, choose from {FEATURE_SETS}")
     return list(cols)
 
 
-def table_of(cols):
-    """The final table that holds these columns: with Stockfish if one of them is a Stockfish column."""
-    for c in columns(cols):
-        if c.startswith("sf_"):
-            return "with_stockfish"
-    return "without_stockfish"
-
-
 def group_of(col):
-    if col.startswith("sf_"):
+    if col.startswith(STOCKFISH_PREFIX):
         return "engine"
     for group, group_cols in GROUPS.items():
         if col in group_cols:
@@ -102,18 +89,17 @@ def groups_of(cols):
 
 
 def is_valid_game(game_ids):
-    """True for the training games held out for validation (the same for every run)."""
-    result = []
-    for g in game_ids:
-        result.append(uniform(g, "ie500-valid") < TRAIN["valid_frac"])
-    return np.array(result, dtype=bool)
+    """True for the training games held out for validation (the same for every run, src/03_transformation/)."""
+    return encoding.is_valid_game(game_ids)
 
 
 def load(part, cols, max_games=None):
-    """The moves of 'train' or 'test' with keys, bucket, target and features; train moves also get `fold`."""
-    path = final_path(table_of(cols), part)
+    """The moves of 'train' or 'test' with keys, bucket, target and features; train moves also have `fold`."""
+    path = table_path(part)
     wanted = columns(cols)
     read = KEYS + ["bucket", TARGET]
+    if part == "train":
+        read.append("fold")
     for c in wanted:
         if c not in read:
             read.append(c)
@@ -132,13 +118,9 @@ def load(part, cols, max_games=None):
     for c in df.columns:
         if df[c].dtype == np.float64:
             df[c] = df[c].astype(np.float32)
-    df = category_coding.add_categories(df, wanted)
-
+    df = encoding.add_categories(df, wanted)
     if part == "train":
-        game_ids = df["game_id"].unique()
-        valid = dict(zip(game_ids, is_valid_game(game_ids)))
-        is_valid = df["game_id"].map(valid).to_numpy(dtype=bool)
-        df["fold"] = pd.Categorical(np.where(is_valid, "valid", "train"), categories=["train", "valid"])
+        df["fold"] = pd.Categorical(df["fold"], categories=encoding.FOLDS)
     return df.reset_index(drop=True)
 
 
@@ -175,18 +157,18 @@ def split_games(df, frac, salt):
 
 
 def features(df, cols):
-    """The feature columns, booleans as numbers (src/03_transformation/encoding/booleans.py)."""
-    return boolean_coding.features(df, columns(cols))
+    """The feature columns, booleans as numbers (src/03_transformation/encoding.py)."""
+    return encoding.features(df, columns(cols))
 
 
 def numeric_prep(cols, scale=None):
-    """Gaps filled, numbers scaled, categories one-hot (src/03_transformation/encoding/numeric.py)."""
-    return numeric_coding.numeric_prep(columns(cols), scale)
+    """Gaps filled, numbers scaled, categories one-hot (src/03_transformation/encoding.py)."""
+    return encoding.numeric_prep(columns(cols), scale)
 
 
 def tree_features(df, cols):
-    """Categories as numbers for the trees (src/03_transformation/encoding/trees.py)."""
-    return tree_coding.tree_features(df, columns(cols))
+    """Categories as numbers for the trees (src/03_transformation/encoding.py)."""
+    return encoding.tree_features(df, columns(cols))
 
 
 class Fitted:
@@ -206,7 +188,7 @@ class Fitted:
 
     def predict(self, df):
         """Blunder probability of every move, in batches to keep the memory down."""
-        batch = TRAIN.get("predict_batch") or 2_000_000
+        batch = PREDICT_BATCH
         parts = []
         for start in range(0, len(df), batch):
             p = self.model.predict_proba(self.x(df.iloc[start:start + batch]))[:, 1]

@@ -10,17 +10,16 @@ import time
 import numpy as np
 import pandas as pd
 
-from src.config import BLUNDER_RATES_DIR
+from src.config import MONTH_DIR
 from src.common.buckets import shrunk
+from src.common.server import ensure
 from ..common import load, save_run
 
 METHOD = "bucket_rate"
 
 
 def read_month():
-    path = BLUNDER_RATES_DIR / "rates.csv"
-    if not path.exists():
-        raise FileNotFoundError(f"{path} is missing: run uv run python -m src.01_selection.preparation.blunder_rates.rates")
+    path = ensure(MONTH_DIR / "rates.csv", "the blunder rates (python -m src.01_selection.month.rates)")
     return pd.read_csv(path, index_col="bucket")
 
 

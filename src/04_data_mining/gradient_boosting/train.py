@@ -9,7 +9,7 @@ import argparse
 from sklearn.ensemble import HistGradientBoostingClassifier
 
 from src.config import SEED
-from ..common import FEATURE_SETS, TRAIN, Fitted, features, fit_and_save, target
+from ..common import FEATURE_SETS, Fitted, features, fit_and_save, target
 
 METHOD = "gradient_boosting"
 DEFAULTS = {"learning_rate": 0.1, "max_leaf_nodes": 63, "min_samples_leaf": 200, "l2_regularization": 1.0,
@@ -38,7 +38,7 @@ def main():
     ap.add_argument("--min-samples-leaf", type=int, default=DEFAULTS["min_samples_leaf"])
     ap.add_argument("--l2-regularization", type=float, default=DEFAULTS["l2_regularization"])
     ap.add_argument("--max-iter", type=int, default=DEFAULTS["max_iter"])
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
     params = {"learning_rate": args.learning_rate, "max_leaf_nodes": args.max_leaf_nodes,

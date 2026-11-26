@@ -8,7 +8,7 @@ import argparse
 from sklearn.naive_bayes import GaussianNB
 from sklearn.pipeline import Pipeline
 
-from ..common import FEATURE_SETS, TRAIN, Fitted, features, fit_and_save, numeric_prep, scaler, target
+from ..common import FEATURE_SETS, Fitted, features, fit_and_save, numeric_prep, scaler, target
 
 METHOD = "naive_bayes"
 DEFAULTS = {"transform": "quantile", "var_smoothing": 1e-2}
@@ -27,7 +27,7 @@ def main():
     ap.add_argument("--features", choices=FEATURE_SETS, default="context")
     ap.add_argument("--transform", choices=["quantile", "standard"], default=DEFAULTS["transform"])
     ap.add_argument("--var-smoothing", type=float, default=DEFAULTS["var_smoothing"])
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
     params = {"transform": args.transform, "var_smoothing": args.var_smoothing}

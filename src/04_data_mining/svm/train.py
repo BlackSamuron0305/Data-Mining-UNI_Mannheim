@@ -11,7 +11,7 @@ from sklearn.linear_model import LogisticRegression, SGDClassifier
 
 from src.config import SEED
 from src.common.metrics import scores
-from ..common import (FEATURE_SETS, TRAIN, Fitted, features, fit_and_save, numeric_prep, split_games,
+from ..common import (FEATURE_SETS, Fitted, features, fit_and_save, numeric_prep, split_games,
                                  target)
 
 METHOD = "svm"
@@ -94,7 +94,7 @@ def main():
     ap.add_argument("--max-epochs", type=int, default=DEFAULTS["max_epochs"])
     ap.add_argument("--patience", type=int, default=DEFAULTS["patience"])
     ap.add_argument("--unweighted", dest="balanced", action="store_false", help="no class weights")
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
     params = {"alpha": args.alpha, "calibration_frac": args.calibration_frac, "max_epochs": args.max_epochs,

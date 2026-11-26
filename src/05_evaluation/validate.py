@@ -1,9 +1,9 @@
 """Validation - score every training run on the same moves.
 
-Usage:  uv run python -m src.05_evaluation.validate [--with LABEL=DATA_FOLDER ...] [--best RUN] [--bootstrap N]
+Usage:  uv run python -m src.05_evaluation.validate [--with SELECTION ...] [--best RUN] [--bootstrap N]
 
-Scores every run in data/runs/ on its own moves and on the moves that every run predicted, against the baseline
-bucket_rate/month, and writes the tables, intervals, figures and error analysis to data/validation/.
+Scores every run in data/04_data_mining/<selection>/ on its own moves and on the moves that every run predicted, against the baseline
+bucket_rate/month, and writes the tables, intervals, figures and error analysis to data/05_evaluation/<selection>/.
 """
 from __future__ import annotations
 
@@ -15,13 +15,15 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import average_precision_score
 
-from src.config import CFG, DATA, GAMES_SUB, ROOT, RUNS_DIR, SELECTION_DIR, VALIDATION_DIR
+from src.config import CFG, RUNS_DIR, RUNS_ROOT, SELECTION, SELECTION_DIR, SELECTION_ROOT, VALIDATION_DIR
 from src.config import KEYS, TARGET
+from src.common.server import ensure
 from src.common.metrics import best_cutoff, calibration, decisions, move_loss, scores, top_name
 from . import bootstrap, errors, figures
 from .groups import DIMENSIONS, SOURCE, aligned, bands, positions
 
 EV = CFG["evaluation"]
+BOOTSTRAP_BINS = 5000        # steps of the predictions for the PR-AUC of the resamples
 PARTS = ("valid", "test")
 K = EV["top_share"]
 TOP = top_name(K)
@@ -41,34 +43,23 @@ def find_runs(runs_dir: Path = RUNS_DIR, label: str = "") -> dict[str, dict]:
 
 
 def test_games(selection_dir: Path) -> set[str]:
-    path = selection_dir / GAMES_SUB / "games.csv"
-    if not path.exists():
-        raise FileNotFoundError(f"{path} is missing: run the selection first")
+    path = ensure(selection_dir / "games.csv", "the selection (python -m src.01_selection.sampling.select)")
     g = pd.read_csv(path, usecols=["game_id", "split"])
     return set(g.loc[g["split"] == "test", "game_id"])
 
 
 def other_runs(specs: list[str]) -> dict[str, dict]:
-    """The runs of the data folders given with --with, if they have the same test games as this one."""
+    """The runs of the selections given with --with, if they have the same test games as this one."""
     out = {}
     if not specs:
         return out
     mine = test_games(SELECTION_DIR)
-    for spec in specs:
-        label, sep, folder = spec.partition("=")
-        if not sep or not label or not folder:
-            raise ValueError(f"--with expects LABEL=DATA_FOLDER, not {spec!r}")
-        data = Path(folder)
-        if not data.is_absolute():
-            data = ROOT / folder
-        selection_dir = data / "selection" / label
-        if not selection_dir.is_dir():
-            selection_dir = data / SELECTION_DIR.relative_to(DATA)
-        theirs = test_games(selection_dir)
+    for label in specs:
+        theirs = test_games(SELECTION_ROOT / label)
         if theirs != mine:
-            raise ValueError(f"{data} has other test games than {DATA} ({len(theirs ^ mine):,} differ): the runs "
-                             "cannot be compared.")
-        runs_dir = data / RUNS_DIR.relative_to(DATA)
+            raise ValueError(f"{label} has other test games than {SELECTION} ({len(theirs ^ mine):,} differ): the "
+                             "runs cannot be compared.")
+        runs_dir = RUNS_ROOT / label
         runs = find_runs(runs_dir, label)
         if not runs:
             raise FileNotFoundError(f"no runs in {runs_dir}")
@@ -231,8 +222,8 @@ def interval_table(iv: pd.DataFrame, order: list[str]) -> list[str]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--with", dest="others", action="append", default=[], metavar="LABEL=DATA_FOLDER",
-                    help="also score the runs of another data folder (test part only)")
+    ap.add_argument("--with", dest="others", action="append", default=[], metavar="SELECTION",
+                    help="also score the runs of another selection, e.g. stratified_balanced (test part only)")
     ap.add_argument("--best", metavar="RUN", help="the run of the error analysis, e.g. gradient_boosting/context "
                     "(default: the lowest valid log loss)")
     ap.add_argument("--bootstrap", type=int, metavar="N", help=f"resamples of the test games for the intervals "
@@ -255,7 +246,7 @@ def run(others: list[str] | None = None, best: str | None = None, n_boot: int | 
     if others:
         # the other folders have other training games: only the test part can be compared
         parts = ("test",)
-        labels = [s.partition("=")[0] for s in others]
+        labels = others
         out_dir = VALIDATION_DIR / ("with_" + "_".join(labels))
     else:
         parts = PARTS
@@ -293,7 +284,7 @@ def run(others: list[str] | None = None, best: str | None = None, n_boot: int | 
         preds = {}
         for r in runs:
             preds[r] = common[r].to_numpy()
-        iv = bootstrap.intervals(y, common["game_id"].to_numpy(), preds, base, n_boot, EV["bootstrap_bins"])
+        iv = bootstrap.intervals(y, common["game_id"].to_numpy(), preds, base, n_boot, BOOTSTRAP_BINS)
         iv.to_csv(out_dir / "intervals.csv", index=False)
     sub = None
     if "phase" in common:
@@ -321,7 +312,7 @@ def run(others: list[str] | None = None, best: str | None = None, n_boot: int | 
              f"lift_{TOP}: blunders caught among the {100 * K:g}% riskiest moves, and how many times the blunder "
              "rate they have.", ""]
     if others:
-        lines += [f"Runs of other data folders: {', '.join(others)}. Same test games as {DATA.name}, other training "
+        lines += [f"Runs of other selections: {', '.join(others)}. Same test games as {SELECTION}, other training "
                   "games, so only the test part is scored.", ""]
     for part in reversed(parts):
         lines += table(res, part)

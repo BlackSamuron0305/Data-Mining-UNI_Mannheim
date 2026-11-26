@@ -19,9 +19,6 @@ cluster/
 # built by the scripts in src/ (see data/README.md)
 data/*
 !data/README.md
-# other data folders (IE500_DATA), e.g. data_balanced/ of the balancing experiment
-data_*/
-cache/
 
 # LaTeX build files
 *.aux

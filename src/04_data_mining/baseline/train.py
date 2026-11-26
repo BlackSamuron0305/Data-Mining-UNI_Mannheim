@@ -3,7 +3,7 @@
 Usage:  uv run python -m src.04_data_mining.baseline.train [--rules overall speed speed_elo eval_wp opp_erred]
             [--max-games N]
 
-Each group's rate is pulled towards its parent's rate by SHRINK moves; writes data/runs/baseline/<rule>/.
+Each group's rate is pulled towards its parent's rate by SHRINK moves; writes data/04_data_mining/<selection>/baseline/<rule>/.
 """
 import argparse
 import time
@@ -13,11 +13,14 @@ import pandas as pd
 
 from src.config import CFG
 from src.common.buckets import SHRINK, elo_bin, shrunk
-from ..common import TARGET, TRAIN, folds, load, save_run
+from ..common import TARGET, columns, folds, load, save_run
 
 METHOD = "baseline"
 RULES = ["overall", "speed", "speed_elo", "eval_wp", "opp_erred"]
 COLUMNS = ["speed", "mover_elo", "eval_wp", "opp_last_loss"]
+# the columns each rule needs; a rule is skipped if step 2 removed one of them
+NEEDS = {"speed": ["speed"], "speed_elo": ["speed", "mover_elo"], "eval_wp": ["eval_wp"],
+         "opp_erred": ["opp_last_loss"]}
 MISTAKE = CFG["features"]["marks"]["mistake"]
 EVAL_BANDS = 20
 
@@ -73,14 +76,23 @@ def predict(df, rule, table, by_parent, overall):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rules", nargs="+", choices=RULES, default=RULES)
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     args = ap.parse_args()
 
     t0 = time.time()
-    fit_df, valid = folds(load("train", COLUMNS, args.max_games))
-    test = load("test", COLUMNS)
-    overall = float(fit_df[TARGET].mean())
+    have = columns("context")
+    rules = []
     for rule in args.rules:
+        missing = [c for c in NEEDS.get(rule, []) if c not in have]
+        if missing:
+            print(f"rule {rule} skipped: {', '.join(missing)} removed in step 2")
+        else:
+            rules.append(rule)
+    cols = [c for c in COLUMNS if c in have]
+    fit_df, valid = folds(load("train", cols, args.max_games))
+    test = load("test", cols)
+    overall = float(fit_df[TARGET].mean())
+    for rule in rules:
         table, by_parent = fit_rule(fit_df, rule)
         preds = {}
         for part, df in [("valid", valid), ("test", test)]:

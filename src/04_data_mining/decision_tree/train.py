@@ -15,7 +15,7 @@ from sklearn.tree import DecisionTreeClassifier, export_text
 from src.config import SEED
 from src.common.buckets import SHRINK
 from src.common.metrics import scores
-from ..common import (FEATURE_SETS, TRAIN, Fitted, columns, folds, load, predictions, run_dir, save_run,
+from ..common import (FEATURE_SETS, Fitted, columns, folds, load, predictions, run_dir, save_run,
                                  target, tree_features)
 
 METHOD = "decision_tree"
@@ -68,7 +68,7 @@ def main():
     ap.add_argument("--depths", type=int, nargs="+", default=GRID["max_depth"])
     ap.add_argument("--min-samples-leaf", type=int, default=DEFAULTS["min_samples_leaf"])
     ap.add_argument("--rules-depth", type=int, default=4)
-    ap.add_argument("--max-games", type=int, default=TRAIN["max_train_games"])
+    ap.add_argument("--max-games", type=int, default=None)
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
 

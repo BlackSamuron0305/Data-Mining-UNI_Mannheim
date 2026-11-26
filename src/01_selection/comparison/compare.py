@@ -1,16 +1,20 @@
-# Compare the three selections with the whole month
+"""Step 1.5: the three selections against the month, bucket by bucket, and fresh stratified draws that show how far
+a selection strays from the month by chance.
+
+Usage:  uv run python -m src.01_selection.comparison.compare   (after the selections and the blunder rates)
+Output: data/01_selection/comparison/: summary.md, comparison.json, buckets.csv, by_time_left.csv, weights.csv;
+        figures from compare_report.ipynb
+"""
 import json
 import logging
 
 import numpy as np
 import pandas as pd
 
-from src.config import (BLUNDER_RATES_DIR, CFG, COMPARISON_DIR, LOGS_SUB, SEED, SELECTION_ROOT, SELECTIONS,
-                        TABLES_SUB, setup_log)
-from ..preparation.blunder_rates.intervals import add_rates
-from ..preparation.blunder_rates.rates import by_time_left
-from ..sampling.common.pool import Pool
-from ..sampling.common.split import draw_stratified, test_part
+from src.config import CFG, COMPARISON_DIR, MONTH_DIR, SEED, SELECTION_ROOT, SELECTIONS, log_path, setup_log
+from ..month.intervals import add_rates
+from ..month.rates import by_time_left
+from ..sampling.draw import Pool, draw_stratified, test_part
 
 log = logging.getLogger("comparison")
 PARTS = ("train", "test")
@@ -61,7 +65,7 @@ def draw_summary(draws: list[dict]) -> dict:
 def weights_table(names: list[str]) -> pd.DataFrame:
     rows = []
     for name in names:
-        g = pd.read_csv(SELECTION_ROOT / name / TABLES_SUB / "groups.csv", index_col="group")
+        g = pd.read_csv(SELECTION_ROOT / name / "groups.csv", index_col="group")
         for group, r in g.iterrows():
             rows.append({"selection": name, "group": group, "speed": r["speed"], "mean_elo": r["mean_elo"],
                          "games_month": r["games"], "games": r["games_train"] + r["games_test"],
@@ -87,14 +91,14 @@ def summary_text(stats: dict, draws: dict) -> str:
 
 
 def run() -> None:
-    rates_path = BLUNDER_RATES_DIR / "rates.csv"
+    rates_path = MONTH_DIR / "rates.csv"
     if not rates_path.exists():
         raise FileNotFoundError(f"{rates_path} is missing: run the blunder rates first")
-    names = [s for s in SELECTIONS if (SELECTION_ROOT / s / TABLES_SUB / "buckets.csv").exists()]
+    names = [s for s in SELECTIONS if (SELECTION_ROOT / s / "buckets.csv").exists()]
     if not names:
         raise FileNotFoundError(f"no selection in {SELECTION_ROOT}: run at least one selection first")
-    (COMPARISON_DIR / LOGS_SUB).mkdir(parents=True, exist_ok=True)
-    setup_log(COMPARISON_DIR / LOGS_SUB / "compare.log")
+    COMPARISON_DIR.mkdir(parents=True, exist_ok=True)
+    setup_log(log_path(SELECTION_ROOT, "compare"))
 
     rates = pd.read_csv(rates_path, index_col="bucket")
     p = rates["rate"].fillna(0).to_numpy()
@@ -103,7 +107,7 @@ def run() -> None:
     columns = {"": ("moves", "blunders")}
     stats = {}
     for name in names:
-        b = pd.read_csv(SELECTION_ROOT / name / TABLES_SUB / "buckets.csv", index_col="bucket")
+        b = pd.read_csv(SELECTION_ROOT / name / "buckets.csv", index_col="bucket")
         stats[name] = {}
         for q in PARTS:
             col = f"{name}_{q}"
