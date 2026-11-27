@@ -1,0 +1,50 @@
+{
+  "lichess": {
+    "rounds": 499,
+    "pr_auc": 0.3001630053831095,
+    "log_loss": 0.15794828534126282,
+    "roc_auc": 0.8712675296587845,
+    "top_gain": {
+      "sf_share_blunder": 0.212,
+      "opp_last_loss": 0.12,
+      "sf_gap_5": 0.093,
+      "eval_wp": 0.084,
+      "opp_blunders": 0.056,
+      "own_moves_since_error": 0.048,
+      "own_loss_max": 0.038,
+      "sf_share_inaccuracy": 0.034
+    }
+  },
+  "eval_swap": {
+    "rounds": 458,
+    "pr_auc": 0.29089644965513484,
+    "log_loss": 0.16030149161815643,
+    "roc_auc": 0.8650045438637369,
+    "top_gain": {
+      "sf_share_blunder": 0.222,
+      "opp_last_loss": 0.121,
+      "sf_gap_5": 0.101,
+      "opp_blunders": 0.064,
+      "own_moves_since_error": 0.046,
+      "sf_wp_best": 0.04,
+      "own_loss_max": 0.032,
+      "mover_elo": 0.032
+    }
+  },
+  "independent": {
+    "rounds": 384,
+    "pr_auc": 0.2717509305452609,
+    "log_loss": 0.16368718445301056,
+    "roc_auc": 0.8560863310731435,
+    "top_gain": {
+      "sf_share_blunder": 0.238,
+      "sf_gap_5": 0.114,
+      "opp_last_loss": 0.101,
+      "own_loss_max": 0.04,
+      "sf_wp_best": 0.038,
+      "sf_gap_2": 0.035,
+      "mover_elo": 0.035,
+      "own_loss_recent": 0.033
+    }
+  }
+}

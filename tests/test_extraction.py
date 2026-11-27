@@ -90,3 +90,41 @@ def test_engine_position_columns():
 def test_engine_columns_with_few_moves():
     row = engine.position_features(np.array([0.5, 0.2]), np.array([0.5, 0.2]), n_legal=2)
     assert np.isnan(row["sf_gap_3"]) and np.isnan(row["sf_worst_3"])
+
+
+@pytest.mark.parametrize("n", [0, 1, 3, 6, 11, 15])
+def test_the_move_itself_does_not_leak(n):
+    # another legal move at ply n: no kept column of plies 0..n may change
+    pgn = lichess_game(16, evals=["0.3", "0.1", "-2.5", "-2.4", "1.0", "0.9", "0.8", "-0.5"] * 2, blunders=(2, 9))
+    full = extract.game_features(pgn)
+    swapped = leakage.swap_game(pgn, n, random.Random(n))
+    assert swapped is not None
+    changed = set(leakage.compare(pd.DataFrame(full), pd.DataFrame(extract.game_features(swapped)), n))
+    assert changed <= set(false_predictors.FALSE_PREDICTORS)
+
+
+def test_swap_catches_a_column_that_reads_the_move():
+    # a column made from the board after the move (what an off-by-one would give) must be caught
+    pgn = lichess_game(10)
+    n = 4
+
+    def after_move(text):
+        game = leakage.read_game(text)
+        board, out = game.board(), []
+        for node in game.mainline():
+            board.push(node.move)
+            out.append(board.fen())
+        return pd.DataFrame({"fen_after": out})
+
+    assert leakage.compare(after_move(pgn), after_move(leakage.cut_game(pgn, n, random.Random(0))), n) == []
+    swapped = leakage.swap_game(pgn, n, random.Random(0))
+    assert leakage.compare(after_move(pgn), after_move(swapped), n) == ["fen_after"]
+
+
+@pytest.mark.skipif(not __import__("shutil").which("stockfish"), reason="needs Stockfish on the PATH")
+def test_engine_columns_do_not_see_the_move():
+    pgn = lichess_game(8)
+    for n in (2, 5):
+        full = engine.analyse_texts([pgn])
+        for other in (leakage.cut_game(pgn, n, random.Random(n)), leakage.swap_game(pgn, n, random.Random(n))):
+            assert leakage.compare(full, engine.analyse_texts([other]), n) == []

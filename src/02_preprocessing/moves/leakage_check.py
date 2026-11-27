@@ -46,6 +46,32 @@ def cut_game(pgn: str, n: int, rng: random.Random) -> str:
     return str(out)
 
 
+def swap_game(pgn: str, n: int, rng: random.Random) -> str | None:
+    """The game up to ply n, with another legal move at ply n (random clock, evaluation and mark) and no result.
+    cut_game keeps the move of ply n, so it cannot show that a column of ply n is blind to the move played there;
+    this does. None if ply n has only one legal move."""
+    game = read_game(pgn)
+    out = chess.pgn.Game()
+    out.headers.update(game.headers)
+    out.headers["Result"] = "*"
+    out.headers["Termination"] = "Unterminated"
+    node = out
+    board = game.board()
+    for t, old in enumerate(itertools.islice(game.mainline(), n + 1)):
+        if t < n:
+            node = node.add_variation(old.move, comment=old.comment, nags=set(old.nags))
+            board.push(old.move)
+            continue
+        others = [m for m in board.legal_moves if m != old.move]
+        if not others:
+            return None
+        node = node.add_variation(rng.choice(others))
+        node.nags = {rng.choice([chess.pgn.NAG_BLUNDER, chess.pgn.NAG_MISTAKE, chess.pgn.NAG_DUBIOUS_MOVE])}
+        node.set_clock(old.clock() if n < 2 else rng.uniform(0, 600))
+        node.set_eval(chess.engine.PovScore(chess.engine.Cp(rng.randint(-900, 900)), chess.WHITE))
+    return str(out)
+
+
 def compare(full: pd.DataFrame, cut: pd.DataFrame, n: int) -> list[str]:
     """Feature columns whose rows 0..n differ between the full and the cut game."""
     a = full.iloc[:n + 1].reset_index(drop=True)
@@ -73,6 +99,7 @@ def main() -> None:
     checked = 0
     first_clock = []
     target_changed = 0
+    swapped_games = 0
     engine_pairs = []
     for pgn in iter_pgn(args.pgn):
         if checked >= args.games:
@@ -86,6 +113,12 @@ def main() -> None:
         cut = pd.DataFrame(game_features(cut_pgn))
         for col in compare(full, cut, n):
             leaks.setdefault(col, []).append((full["game_id"].iloc[0], n))
+        # the same with another move at ply n: no kept column of ply n may see which move was played
+        swap_pgn = swap_game(pgn, n, rng)
+        if swap_pgn is not None:
+            swapped_games += 1
+            for col in compare(full, pd.DataFrame(game_features(swap_pgn)), n):
+                leaks.setdefault(col, []).append((full["game_id"].iloc[0], n))
         if full[TARGET].iloc[n] != cut[TARGET].iloc[n]:
             target_changed += 1
         # the clock after each side's first move should be the start time
@@ -93,13 +126,16 @@ def main() -> None:
         base, _ = time_control(game.headers.get("TimeControl", "0+0"))
         clocks = [node.clock() for node in itertools.islice(game.mainline(), 2)]
         first_clock.append(all(abs(c - base) <= 1 for c in clocks))
-        if len(engine_pairs) < args.engine:
+        if len({p for p, _, _ in engine_pairs}) < args.engine:
             engine_pairs.append((pgn, cut_pgn, n))
+            if swap_pgn is not None:
+                engine_pairs.append((pgn, swap_pgn, n))
         checked += 1
 
     caught = {col: cases for col, cases in leaks.items() if col in FALSE_PREDICTORS}
     leaks = {col: cases for col, cases in leaks.items() if col not in FALSE_PREDICTORS}
-    log.info("extract.py: %d games cut at a random ply, %d kept columns with a difference", checked, len(leaks))
+    log.info("extract.py: %d games cut at a random ply (%d also with another move there), %d kept columns with a "
+             "difference", checked, swapped_games, len(leaks))
     log.info("the cut changed the target of the cut ply in %d games (shows that move n itself was altered)",
              target_changed)
     for col, cases in leaks.items():
@@ -119,11 +155,12 @@ def main() -> None:
             for col in compare(full, cut, n):
                 engine_leaks.setdefault(col, []).append(n)
         leak_text = "".join(f"; LEAK {col}" for col in engine_leaks)
-        log.info("stockfish.py: %d games, %d columns with a difference%s", len(engine_pairs), len(engine_leaks),
-                 leak_text)
+        log.info("stockfish.py: %d game pairs (cut and swapped), %d columns with a difference%s", len(engine_pairs),
+                 len(engine_leaks), leak_text)
     ok = not leaks and not engine_leaks
     log.info("result: %s", "no leakage found" if ok else "LEAKAGE FOUND")
-    result = {"games": checked, "leaks": sorted(leaks), "engine_games": len(engine_pairs),
+    result = {"games": checked, "swapped_games": swapped_games, "leaks": sorted(leaks),
+              "engine_games": len({pgn for pgn, _, _ in engine_pairs}), "engine_pairs": len(engine_pairs),
               "engine_leaks": sorted(engine_leaks), "target_changed": target_changed,
               "false_predictors_changed": sorted(caught), "no_leakage": ok}
     PREPROCESSING_DIR.mkdir(parents=True, exist_ok=True)

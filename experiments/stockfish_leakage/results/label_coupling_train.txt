@@ -1,0 +1,39 @@
+train: 18,515,625 moves, 280,000 games, blunder rate 0.0551, sf missing 0
+
+D. ?? against the rule 'loss in win probability >= 0.15' (moves with an evaluation before and after)
+rule        False   True 
+?? mark                  
+False    16488639  457970
+True       147980  861036
+agreement 96.6253%
+  threshold 0.10: agreement 93.4324%
+  threshold 0.14: agreement 96.1728%
+  threshold 0.15: agreement 96.6253%
+  threshold 0.16: agreement 97.0005%
+  threshold 0.20: agreement 97.9561%
+  threshold 0.30: agreement 97.3573%
+moves with eval_wp < 0.15: 2,713,388, of them ??: 0.02810 (cannot lose 0.15 from there)
+
+A. r = eval_wp - sf_wp_best on 18,235,625 moves: mean -0.0023, sd 0.0336, corr 0.9925
+blunder rate by band of our engine's win probability (rows) and of r (columns):
+r_band         (-1.01, -0.1]  (-0.1, -0.03]  (-0.03, -0.01]  (-0.01, 0.01]  (0.01, 0.03]  (0.03, 0.1]  (0.1, 1.01]
+sf_band                                                                                                           
+(-0.001, 0.1]            NaN         0.0000          0.0063         0.0092        0.0499       0.0666       0.0683
+(0.1, 0.3]            0.0470         0.0643          0.0752         0.0807        0.0819       0.0674       0.0894
+(0.3, 0.5]            0.1155         0.1252          0.0796         0.0457        0.0459       0.1215       0.2990
+(0.5, 0.7]            0.1348         0.0529          0.0299         0.0227        0.0415       0.0897       0.2301
+(0.7, 0.9]            0.0832         0.0851          0.1039         0.1189        0.1337       0.1551       0.1788
+(0.9, 1.0]            0.0917         0.0722          0.0700         0.0561        0.0761       0.0764          NaN
+moves:
+r_band         (-1.01, -0.1]  (-0.1, -0.03]  (-0.03, -0.01]  (-0.01, 0.01]  (0.01, 0.03]  (0.03, 0.1]  (0.1, 1.01]
+sf_band                                                                                                           
+(-0.001, 0.1]            NaN       177465.0        457609.0       919700.0      190576.0     228325.0      20454.0
+(0.1, 0.3]           61153.0       517936.0        327636.0       271380.0      193019.0     344453.0      28568.0
+(0.3, 0.5]           36842.0       243204.0        599246.0      2388489.0     1176450.0     230384.0       7301.0
+(0.5, 0.7]            7158.0       357172.0       1312553.0      2606347.0      613244.0     239595.0      42469.0
+(0.7, 0.9]           53688.0       464152.0        246185.0       326511.0      313806.0     451932.0      62033.0
+(0.9, 1.0]           49187.0       381843.0        326204.0      1416173.0      386513.0     158670.0          NaN
+  ours (sf_wp_best)    log loss 0.20467  PR-AUC 0.1017
+  Lichess (eval_wp)    log loss 0.20266  PR-AUC 0.1027
+  ours + r             log loss 0.20367  PR-AUC 0.1069
+  Lichess + ours       log loss 0.20152  PR-AUC 0.1133
