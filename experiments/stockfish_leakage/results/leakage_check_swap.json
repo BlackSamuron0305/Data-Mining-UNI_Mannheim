@@ -1,0 +1,20 @@
+{
+  "games": 2000,
+  "swapped_games": 1988,
+  "leaks": [],
+  "engine_games": 10,
+  "engine_pairs": 20,
+  "engine_leaks": [],
+  "target_changed": 684,
+  "false_predictors_changed": [
+    "clock_after",
+    "eval_after",
+    "game_plies",
+    "loss",
+    "mark",
+    "result",
+    "spent",
+    "termination"
+  ],
+  "no_leakage": true
+}

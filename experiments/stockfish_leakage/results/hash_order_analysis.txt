@@ -1,0 +1,20 @@
+19,970 positions, 300 games, 1100 blunders
+
+1. agreement with Lichess's eval_wp (position before the move)
+   fwd: mean |diff| 0.0149, median 0.0073, corr 0.9961
+   rev: mean |diff| 0.0150, median 0.0066, corr 0.9961
+
+2. ?? marks reproduced by the rule loss >= 0.15
+   fwd: agreement 95.9227%, recall of ?? 0.827, precision 0.596
+   rev: agreement 95.7905%, recall of ?? 0.829, precision 0.586
+
+3. d = wp_rev - wp_fwd, the change the backward hash makes to the evaluation BEFORE the move
+   blunder=False: n 18,870, mean d +0.00019, mean |d| 0.00728, share |d|>0.02 0.075
+   blunder=True: n 1,100, mean d -0.00181, mean |d| 0.00972, share |d|>0.02 0.131
+   mean d, blunders minus others: -0.00200, 95% interval [-0.00311 -0.0009 ]
+   mean |d|, blunders minus others: +0.00243, 95% interval [0.00172 0.00321]
+
+4. logistic regression on what a model sees before the move (eval before, opponent's last loss), 5-fold by game
+   fwd: log loss 0.19830
+   rev: log loss 0.19854
+   log loss fwd - rev: -0.00024, 95% interval [-0.00063  0.00013] (positive: the backward evaluations predict the label better)
