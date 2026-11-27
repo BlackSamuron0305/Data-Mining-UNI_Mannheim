@@ -18,8 +18,8 @@ from sklearn.metrics import average_precision_score
 from src.config import CFG, RUNS_DIR, RUNS_ROOT, SELECTION, SELECTION_DIR, SELECTION_ROOT, VALIDATION_DIR
 from src.config import KEYS, TARGET
 from src.common.server import ensure
-from src.common.metrics import best_cutoff, calibration, decisions, move_loss, scores, top_name
-from . import bootstrap, errors, figures
+from src.common.metrics import best_cutoff, calibration, decisions, move_loss, operating_points, scores, top_name
+from . import bootstrap, errors, figures, report_assets
 from .groups import DIMENSIONS, SOURCE, aligned, bands, positions
 
 EV = CFG["evaluation"]
@@ -27,11 +27,14 @@ BOOTSTRAP_BINS = 5000        # steps of the predictions for the PR-AUC of the re
 PARTS = ("valid", "test")
 K = EV["top_share"]
 TOP = top_name(K)
-SHOWN = ["log_loss", "log_loss_gain", "brier_skill_vs_baseline", "roc_auc", "pr_auc", "ece", "f1", "mcc",
-         f"recall_{TOP}", f"lift_{TOP}"]
+SHOWN = ["log_loss", "log_loss_gain", "brier_skill_vs_baseline", "roc_auc", "pr_auc", "ece",
+         "accuracy", "precision", "recall", "f1", "f05", "mcc", "balanced_accuracy",
+         f"precision_{TOP}", f"recall_{TOP}", f"lift_{TOP}"]
 
 
-def find_runs(runs_dir: Path = RUNS_DIR, label: str = "") -> dict[str, dict]:
+def find_runs(runs_dir: Path | None = None, label: str = "") -> dict[str, dict]:
+    if runs_dir is None:
+        runs_dir = RUNS_DIR
     runs = {}
     for meta in sorted(runs_dir.glob("*/*/run.json")):
         info = json.loads(meta.read_text(encoding="utf-8"))
@@ -296,7 +299,22 @@ def run(others: list[str] | None = None, best: str | None = None, n_boot: int | 
     figs = figures.draw(y, drawn_preds, base, cut, sub, K, out_dir / "figures")
     del common
 
-    own = predictions(runs[best], "test")
+    op_frames = []
+    best_v = None
+    best_t = None
+    for r in dict.fromkeys([best] + drawn):
+        v_df = predictions(runs[r], "valid")
+        t_df = predictions(runs[r], "test")
+        op_r = operating_points(v_df[TARGET], v_df["p"], t_df[TARGET], t_df["p"])
+        op_r.insert(0, "run", r)
+        op_frames.append(op_r)
+        if r == best:
+            best_v, best_t = v_df, t_df
+    op_all = pd.concat(op_frames, ignore_index=True)
+    op_all.to_csv(out_dir / "operating_points.csv", index=False)
+    best_op_df = op_all[op_all["run"] == best].copy()
+
+    own = best_t.copy()
     pos = positions("test", SOURCE + errors.FEATURES)
     if pos is not None:
         own = own.join(aligned(own, pos))
@@ -305,10 +323,31 @@ def run(others: list[str] | None = None, best: str | None = None, n_boot: int | 
     errors.analyse(best, own, cut[best], out_dir / "errors")
     del own, pos
 
+    cut_f1_best = best_cutoff(best_v[TARGET], best_v["p"], "f1")
+    cut_f05_best = best_cutoff(best_v[TARGET], best_v["p"], "f0.5")
+    figures.operating_points_metrics(
+        best_t[TARGET].to_numpy(), best_t["p"].to_numpy(), cut_f1_best, cut_f05_best, best_op_df, out_dir / "figures"
+    )
+    figs.append("operating_points_metrics")
+    if others and figures.stratified_vs_balanced(res, iv, out_dir / "figures", other_label=others[0]):
+        figs.append("stratified_vs_balanced")
+    for tree_cand in (
+        RUNS_DIR / "decision_tree" / "engine_depth4" / "model.joblib",
+        RUNS_DIR / "decision_tree" / "engine" / "model.joblib",
+        RUNS_DIR / "decision_tree" / "context" / "model.joblib",
+    ):
+        if tree_cand.exists() and figures.tree_depth4(tree_cand, out_dir / "figures"):
+            figs.append("tree_depth4")
+            break
+    if figures.error_profile(out_dir / "errors" / "by_subgroup.csv", out_dir / "errors" / "cells.csv", out_dir / "figures"):
+        figs.append("error_profile")
+
+    tables = report_assets.export(res, iv, best_op_df, out_dir, runs_dir=RUNS_DIR, others=others)
+
     lines = ["# Validation of every run", "",
              f"Baseline: {base or 'none (train bucket_rate first)'}. Scores on the moves that every run predicted "
              "(common); choose on valid, report test. log_loss_gain > 0 and brier_skill_vs_baseline > 0: better "
-             f"than the baseline. f1 and mcc at the run's cut-off, chosen on its own valid moves; recall_{TOP} and "
+             f"than the baseline. f1, f05 and mcc at the run's cut-off, chosen on its own valid moves; recall_{TOP} and "
              f"lift_{TOP}: blunders caught among the {100 * K:g}% riskiest moves, and how many times the blunder "
              "rate they have.", ""]
     if others:
@@ -326,9 +365,11 @@ def run(others: list[str] | None = None, best: str | None = None, n_boot: int | 
     how = "Chosen with --best" if by_flag else "Lowest valid log loss"
     lines += [f"## Best run: {best}", "",
               f"{how}. On its "
-              f"own test moves at the cut-off {t['cutoff']:.4f}: {t['flagged']:.1%} flagged, recall {t['recall']:.1%}, "
-              f"precision {t['precision']:.1%}, MCC {t['mcc']:.3f}. Error analysis: errors/summary.md.", "",
-              f"Figures (figures/, {', '.join(drawn)}): {', '.join(figs)}.", ""]
+              f"own test moves at the cut-off {t['cutoff']:.4f}: {t['flagged']:.1%} flagged, accuracy {t['accuracy']:.1%}, "
+              f"recall {t['recall']:.1%}, precision {t['precision']:.1%}, F1 {t['f1']:.3f}, F0.5 {t['f05']:.3f}, "
+              f"MCC {t['mcc']:.3f}. Error analysis: errors/summary.md.", "",
+              f"Figures (figures/, {', '.join(drawn)}): {', '.join(figs)}.",
+              f"Tables (tables/): {', '.join(tables)}.", ""]
 
     lines += ["## Moves per run (own)", "", "| run | " + " | ".join(parts) + " |", "|:--|" + "--:|" * len(parts)]
     own_res = res[res["moves_on"] == "own"]
