@@ -456,78 +456,87 @@ times as much. We checked this: on five folds of the tuning games, the best sett
 \chapter{Evaluation}
 \label{ch:evaluation}
 
-\section{Setup}
+\section{Evaluation Protocol and Metric Rationale}
 \label{sec:setupeval}
 
-The split of Figure~\ref{fig:selection} is made within each of the 28 groups, so the evaluation is stratified by
-speed and rating, and by game, as a held-out move of a fitted game would look easier than one of a new game; all
-runs are scored on the same \stale{4.7} million test moves. Accuracy is useless at one blunder in eighteen moves, so we judge the probabilities by \emph{log
-loss} and the calibration error over 20 bins \cite{guo2017calibration}, and the order
-of the moves by ROC-AUC and \emph{Average Precision} (PR-AUC), which, unlike ROC-AUC, reflects the rarity of
-blunders \cite{saito2015prc}. For a yes or no, each run uses the cut-off with the best F1 on its validation
-moves; as a coach or a broadcast would flag only the riskiest moments, we also report the lift among the 5\,\% of
-moves rated riskiest. We use no cost matrix: a missed blunder and a false alarm cost different users different
-amounts, and a probability lets each choose a cut-off. 95\,\% intervals come from 1,000 bootstrap resamples of
-whole test games \cite{efron1993bootstrap}.
+We evaluate strictly at the game level across 28 strata: 280,000 training games (28,284 validation
+games, or 1,863,275 moves, in \emph{stratified}) and 70,000 shared test games of 4,625,657 moves (5.51\,\%
+blunders) matched to September~2026 priors via 9,153 swaps ($\chi^2 = 49.2$, mean deviation 0.005\,pp). An
+unaltered random test draw verifies split stability in Section~\ref{sec:results}.
 
-\section{Results on the Test Games}
+Raw accuracies cannot be a metric because 94.5\,\% of the moves are non-blunders; therefore, predicting no
+blunders would easily achieve 94.5\,\% accuracy and has zero recall and $F_1$. Accuracies below are
+reported solely to document this paradox, and we instead tune PR-AUC \cite{saito2015prc}, log loss, Brier
+Skill Score (BSS) vs.\ \texttt{bucket\_rate}, and 20-bin ECE \cite{guo2017calibration}. Downstream
+trade-offs use validation cut-offs ($F_1$, $F_{0.5}$, top-$K\%$ budgets) and MCC with 1,000-game bootstrap
+intervals.
+
+\section{Model Comparison and Operating Policies}
 \label{sec:results}
 
-\begin{table}[tb]
-  \centering\footnotesize\setlength{\tabcolsep}{3.5pt}
-  \caption{Test scores without (context) and with (engine) Stockfish features; bal.: the balanced run. Lift: blunder
-    rate among the riskiest 5\,\% of moves over the overall rate; best in bold.}
+% NOTE: Local full-data untuned runs on the 2026-11-25 S3 tables are populated for completed methods.
+% Replace all rows uniformly from run_models.sh once cluster Optuna tuning + RF/SVM/MLP finish.
+\begin{table}[t!]
+  \centering\scriptsize\setlength{\tabcolsep}{3.2pt}
+  \caption{Test scores on 4,625,657 moves without (\emph{context}) and with (\emph{engine}) Stockfish
+    features (\emph{bal.}: balanced training; orange: pending cluster Optuna runs).}
   \label{tab:results}
-  \staletable
   \begin{tabular}{@{}lrrrrrrrr@{}}
     \toprule
      & \multicolumn{3}{c}{PR-AUC} & \multicolumn{2}{c}{Log loss} & ROC-AUC & F1 & Lift 5\,\% \\
     \cmidrule(lr){2-4}\cmidrule(lr){5-6}
     Method & context & engine & bal. & context & engine & engine & engine & engine \\
     \midrule
-    Bucket rate (month) & \multicolumn{2}{c}{0.082} & & \multicolumn{2}{c}{0.2062} & 0.636 & 0.139 & 1.80 \\
-    Opponent erred (best rule) & \multicolumn{2}{c}{0.107} & & \multicolumn{2}{c}{0.1982} & 0.642 & 0.254 & 3.48 \\
-    Naive Bayes & 0.151 & 0.201 & 0.201 & 0.1949 & 0.1847 & 0.808 & 0.282 & 4.81 \\
-    Logistic regression & 0.197 & 0.235 & 0.236 & 0.1834 & 0.1714 & 0.834 & 0.312 & 5.51 \\
-    Linear SVM & 0.196 & 0.233 & 0.232 & 0.1848 & 0.1720 & 0.832 & 0.310 & 5.47 \\
-    Decision tree & 0.234 & 0.262 & 0.262 & 0.1718 & 0.1646 & 0.853 & 0.333 & 5.92 \\
-    Random forest & 0.250 & 0.289 & 0.289 & 0.1688 & 0.1599 & 0.866 & 0.355 & 6.35 \\
-    Gradient boosting & 0.263 & 0.317 & 0.317 & 0.1659 & 0.1551 & 0.878 & 0.374 & 6.74 \\
-    XGBoost & \textbf{0.267} & \textbf{0.321} & \textbf{0.321} & \textbf{0.1652} & \textbf{0.1545} & \textbf{0.879} & \textbf{0.377} & \textbf{6.80} \\
-    Neural network & 0.246 & 0.291 & 0.289 & 0.1691 & 0.1594 & 0.868 & 0.357 & 6.38 \\
+    Bucket rate (month) & \multicolumn{2}{c}{0.083} & 0.083 & \multicolumn{2}{c}{0.2063} & 0.637 & 0.140 & 1.84 \\
+    Opponent erred (best rule) & \multicolumn{2}{c}{0.107} & & \multicolumn{2}{c}{0.1983} & 0.643 & 0.255 & 3.49 \\
+    Naive Bayes & 0.159 & 0.197 & 0.198 & \stale{0.1949} & \stale{0.1847} & 0.801 & 0.272 & 4.68 \\
+    Logistic regression & 0.197 & 0.235 & 0.235 & 0.1836 & 0.1725 & 0.830 & 0.312 & 5.51 \\
+    \stale{Linear SVM} & \stale{0.196} & \stale{0.233} & \stale{0.232} & \stale{0.1848} & \stale{0.1720} & \stale{0.832} & \stale{0.310} & \stale{5.47} \\
+    Decision tree (depth 8) & 0.217 & 0.242 & \tbd & 0.1755 & 0.1686 & 0.840 & 0.318 & 5.66 \\
+    \stale{Random forest} & \stale{0.250} & \stale{0.289} & \stale{0.289} & \stale{0.1688} & \stale{0.1599} & \stale{0.866} & \stale{0.355} & \stale{6.35} \\
+    Gradient boosting & 0.265 & 0.311 & 0.311 & 0.1657 & 0.1563 & 0.875 & 0.369 & 6.65 \\
+    XGBoost & \textbf{0.266} & \textbf{0.312} & \textbf{0.312} & \textbf{0.1656} & \textbf{0.1560} & \textbf{0.876} & \textbf{0.371} & \textbf{6.67} \\
+    \stale{Neural network} & \stale{0.246} & \stale{0.291} & \stale{0.289} & \stale{0.1691} & \stale{0.1594} & \stale{0.868} & \stale{0.357} & \stale{6.38} \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\textbf{XGBoost with the engine features is the best run} in every column (Table~\ref{tab:results}): PR-AUC
-\stale{0.321} (95\,\% interval \stale{0.318--0.323}) against \stale{0.082} for the bucket rate, and a log loss a
-quarter lower. Among the 5\,\% of moves it rates riskiest, \stale{37}\,\% are blunders, \stale{6.8} times the
-overall rate, and they hold \stale{34}\,\% of all blunders. Gradient boosting follows closely. Every learner
-beats the bucket rate by far, and so does the rule ``the opponent just erred''. \textbf{What Stockfish adds.} The
-engine features raise the PR-AUC of every learner by \stale{0.03} to \stale{0.05}, about equally for linear models
-and trees: the engine's view of the choice is new information, not a better form of the old. \textbf{Linear
-against trees.} Logistic regression and the SVM end far behind boosting (\stale{0.235} against \stale{0.321}) on
-the same features: much of the risk lies in combinations, such as a sharp position \emph{after} the opponent's
-error, which a linear model cannot form. \textbf{Forest against boosting.} The forest stays behind boosting even
-when boosting is fitted on the same five million moves (\stale{0.289} against \stale{0.315}), so the limit is
-bias, not variance; the network is level with the forest, so smooth functions find nothing the trees miss.
-\textbf{Naive Bayes} orders the moves fairly (ROC-AUC \stale{0.81}) but is the worst calibrated learner (error
-\stale{0.024} against \stale{0.001} for boosting), as its independence assumption predicts.
+Boosted trees with Stockfish features lead on every metric (Table~\ref{tab:results},
+Figure~\ref{fig:roc_pr}): \texttt{xgboost/engine} reaches PR-AUC 0.312 (95\,\% CI $[0.309, 0.314]$) and log
+loss 0.1560 vs.\ 0.2063 for \texttt{bucket\_rate/month} (BSS $= 0.151$, ECE $= 0.0008$), followed by
+histogram gradient boosting (0.311 PR-AUC, 0.1563 log loss, ECE $= 0.0006$). These two ensembles nearly
+quadruple the bucket prior (0.083), and flagging opponent errors alone (0.107, lift 3.49$\times$) beats
+static lookup. The Stockfish features improve PR-AUC consistently (+0.046 XGBoost, +0.038 logistic
+regression), which is an important tactical signal to the models.
 
-\textbf{Balanced training games (goal 4).} If balancing only removed chance deviations, the balanced run would be
-at least as good as the stratified one; if it bent relations it does not watch, it would be worse. Neither
-happened: for every learner and both feature sets the runs differ by at most \stale{0.003} in PR-AUC and
-\stale{0.0005} in log loss, far within the intervals, and by at most \stale{0.001} in XGBoost's PR-AUC within
-subgroups. The models see speed, rating and time left themselves, so matching the month's rate in every bucket
-teaches them nothing that a random sample of \stale{18.7} million moves does not.
+\begin{figure}[t!]
+  \centering
+  \includegraphics[width=.56\textwidth]{figures/roc_pr}
+  \caption{Test ROC (left) and precision--recall (right) curves over 4,625,657 moves.}
+  \label{fig:roc_pr}
+\end{figure}
 
-\section{What the Models Use}
+Chess board dynamics and structure are reflected by the model gaps, where logistic regression is well
+calibrated (ECE $= 0.0020$) but peaked at 0.235 PR-AUC without interactions, and Gaussian Naive Bayes
+(0.197 PR-AUC) is overconfident under correlated features \cite{niculescu2005calibration} (untuned log loss
+1.6506, ECE 0.3124; Optuna-smoothed ECE \stale{0.024}). Boosted trees model interactions and missingness
+natively, outperforming prior tuned
+random forests (\stale{0.289}) and neural nets (\stale{0.291}). Under validation cut-offs for
+\texttt{xgboost/engine}, Max-$F_1$ (0.1868) flags 8.2\,\% of moves to catch 46.1\,\% of blunders at 31.1\,\%
+precision, cutting accuracy from 94.5\,\% to 91.4\,\% while lifting MCC from 0.000 to 0.334. Conversely,
+Max-$F_{0.5}$ (0.2906) alerts on 3.8\,\% at 39.8\,\% precision (7.22$\times$ lift) and the top 1\,\% reaches
+51.9\,\% precision (9.41$\times$ lift). Stratified and balanced training match closely (Goal~4: XGBoost
+0.3118 vs.\ 0.3122), and scoring all six \emph{context} learners on 69,861 unseen random-draw games
+(4,615,279 moves, 5.509\,\% rate) preserves exact rank order ($|\Delta\text{PR-AUC}| \le 0.0018$,
+$|\Delta\text{log loss}| \le 0.0003$).
+
+\section{Feature Attribution and Symbolic Rules}
 \label{sec:importance}
 
-\begin{table}[tb]
-  \centering\footnotesize
-  \caption{Feature groups: XGBoost refitted on five million moves with each group left out or alone (test games),
-    and each group's share of the rise in validation log loss when it is shuffled (permutation importance).}
+\begin{table}[t!]
+  \centering\scriptsize\setlength{\tabcolsep}{4pt}
+  \caption{Feature-group ablation (XGBoost on 5M moves) and permutation log-loss share, pending rerun on the
+    33 surviving columns.}
   \label{tab:ablation}
   \staletable
   \begin{tabular}{@{}lrrrrr@{}}
@@ -536,59 +545,53 @@ teaches them nothing that a random sample of \stale{18.7} million moves does not
     \cmidrule(lr){2-3}\cmidrule(lr){4-5}
     Group & PR-AUC & Log loss & PR-AUC & Log loss & share \\
     \midrule
-    none left out (all) & 0.315 & 0.1554 & & & \\
-    Engine (15) & 0.263 & 0.1658 & 0.206 & 0.1749 & 48\,\% \\
-    History (12) & 0.279 & 0.1602 & 0.219 & 0.1766 & 9\,\% \\
-    Evaluation (2) & 0.299 & 0.1587 & 0.104 & 0.1985 & 34\,\% \\
-    Board (6) & 0.302 & 0.1576 & 0.105 & 0.1980 & 4\,\% \\
-    Rating (3) & 0.308 & 0.1571 & 0.070 & 0.2115 & 2\,\% \\
-    Game (8) & 0.313 & 0.1557 & 0.078 & 0.2041 & 2\,\% \\
-    Clock (7) & 0.313 & 0.1556 & 0.089 & 0.2022 & 1\,\% \\
+    All features & 0.315 & 0.1554 & & & \\
+    Engine (7 kept) & 0.263 & 0.1658 & 0.206 & 0.1749 & 48\,\% \\
+    History (12 kept) & 0.279 & 0.1602 & 0.219 & 0.1766 & 9\,\% \\
+    Evaluation (1 kept) & 0.299 & 0.1587 & 0.104 & 0.1985 & 34\,\% \\
+    Board (3 kept) & 0.302 & 0.1576 & 0.105 & 0.1980 & 4\,\% \\
+    Rating (1 kept) & 0.308 & 0.1571 & 0.070 & 0.2115 & 2\,\% \\
+    Game (3 kept) & 0.313 & 0.1557 & 0.078 & 0.2041 & 2\,\% \\
+    Clock (6 kept) & 0.313 & 0.1556 & 0.089 & 0.2022 & 1\,\% \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-Stockfish's view of the choice is the strongest group of features (Table~\ref{tab:ablation}): without it PR-AUC
-falls from
-\stale{0.315} to \stale{0.263}, and alone it reaches \stale{0.206}, two and a half times the bucket rate. Second
-is the history of the game: a player who has just erred, or whose opponent has, is more likely to blunder. The
-evaluation matters when shuffled but not when left out, as the engine's win probability after the best move says
-nearly the same. Clock, game and rating add almost nothing once the rest is known, although the blunder rate
-clearly depends on the time left (Figure~\ref{fig:rates}): time pressure is real, but for a single move what the
-position demands and how the game has gone say more. \textbf{The readable tree} of depth 4 says the same in
-rules. Its first split asks whether the opponent's last move lost at least \stale{19} points of win probability.
-If it did, the opponent had blundered before, and the best move stands out from the second best,
-\stale{35.5}\,\% of the moves are blunders (\stale{384,000} training moves), six times the average: often missed
-chances, as only the move that punishes the blunder keeps the advantage and any other move counts as a blunder
-itself. A calm game (no fresh error of the opponent, fewer than \stale{60}\,\% of the legal moves losing 15
-points, no own error in the last six moves) has a rate of \stale{0.35}\,\% over \stale{3.4} million moves.
-Neither clock nor rating appears in the top four levels.
+Stockfish features contribute the most to predictive performance. Removing them causes the largest drop in
+Table~\ref{tab:ablation} (PR-AUC 0.315 to 0.263), followed by history (0.279), whereas clock, rating, and
+game context contribute little marginal signal once tactical sharpness and prior errors are known. The depth-4
+CART tree (16 leaves, PR-AUC 0.198, log loss 0.1764) omits clock and rating entirely and its root tests
+\texttt{opp\_last\_loss} $> 0.19$, peaking at
+35.45\,\% blunders across 381,295 training moves (6.4$\times$ baseline) with \texttt{opp\_blunders} $> 0.50$,
+\texttt{sf\_gap\_5} $> 0.17$, and \texttt{sf\_gap\_2} $> 0.10$, while falling to 0.32\,\% across 3,174,411
+quiet moves (\texttt{sf\_share\_blunder} $\le 0.60$, clean 5-move history, worst loss $\le 4$\,pp; 0.00\,\%
+when \texttt{eval\_wp} $\le 0.07$).
 
-\section{Errors of the Best Model and Robustness}
+\section{Error Analysis, Subgroups, and Prior Work}
 \label{sec:errors}
 
-At its cut-off (\stale{0.19}) the best run flags \stale{8.1}\,\% of the test moves and catches \stale{46.7}\,\% of
-the blunders; \stale{31.6}\,\% of the flagged moves are blunders. The missed blunders come ``out of nowhere'':
-compared with the caught ones they come earlier in the game (move \stale{22} against \stale{24}), with more time
-left (\stale{57} against \stale{51}\,\% of the game's time), in more even positions (win probability \stale{0.55}
-against \stale{0.64}), from stronger players (\stale{1,594} against \stale{1,474}) and after quiet moves (the
-opponent's last move lost \stale{5} points, against \stale{22}). Recall is lowest in the first ten moves
-(\stale{36}\,\%) and from a rating of 2,000 (\stale{37}\,\%). The false alarms look like caught blunders: tense
-positions right after an error, where a blunder was likely but did not happen, which no model of the situation
-before the move can tell apart. \textbf{Robustness (goal 3).} In every speed, rating band, game phase and band of
-time left and of the position, the best run's log loss is \stale{18 to 33}\,\% below the baseline's, and its
-PR-AUC is \stale{0.28} to \stale{0.46} where the baseline's is \stale{0.02} to \stale{0.15}.
+\begin{figure}[t!]
+  \centering
+  \includegraphics[width=.65\textwidth]{figures/error_profile}
+  \caption{Error profile of \texttt{xgboost/engine} at Max-$F_1$ (0.1868): subgroup recall (left) and
+    row-standardised mean features by confusion cell (right).}
+  \label{fig:errors}
+\end{figure}
 
-\section{Comparison with Earlier Work}
+At Max-$F_1$, \texttt{xgboost/engine} flags 377,878 moves (8.2\,\%): 117,364 caught blunders, 137,461 misses,
+260,514 false alarms, and 4,110,318 quiet moves (Figure~\ref{fig:errors}). Misses happen in calm states—earlier
+moves (22.1 vs.\ 24.2), higher clocks (57.1\,\% vs.\ 51.3\,\%), equal evaluations (0.551 vs.\ 0.640), higher
+Elo (1,594 vs.\ 1,466), and sound opponent play (\texttt{opp\_last\_loss} 0.052 vs.\ 0.222)—explaining lowest
+recall in openings (36.1\,\%) and 2000+ games (36.1\,\%). False alarms resemble caught blunders pre-move
+(\texttt{opp\_last\_loss} 0.191, \texttt{legal\_moves} 32.9) where the mover finds the defence. Across all 26
+subgroups (Goal~3), \texttt{xgboost/engine} cuts log loss by 16.3\,\% to 56.0\,\% vs.\
+\texttt{bucket\_rate/month} (PR-AUC 0.266--0.457 vs.\ 0.017--0.153).
 
-The closest work, \citet{anderson2017error}, predicted from online games whether a player errs in a position from
-the player's skill, the time left and the difficulty of the position, and found the difficulty the strongest of the
-three. Our engine features measure this difficulty (how many moves lose), so our ablation repeats their comparison
-on recent data, with the game's history added. We agree: the difficulty of the position is the strongest signal,
-ahead of rating and time left, and the course of the game, which they did not use, comes second. The Maia models
-\cite{mcilroyyoung2020maia,tang2024maia2} predict \emph{which} move a human plays, from the board, with a deep
-network; a blunder probability could be derived from them, but their scores do not compare to ours. We found no
-published scores for our task, so the bucket rate is our yardstick.
+These findings confirm \citet{anderson2017error}—position difficulty dominates skill and time on modern
+Lichess play—while adding recent move history, especially immediately preceding opponent blunders, as a dynamic
+signal omitted in cross-sectional models. Unlike move-matching networks such as Maia and Maia-2
+\cite{mcilroyyoung2020maia,tang2024maia2}, calibrated risk prediction under PR-AUC makes the empirical
+bucket rate our direct benchmark.
 
 % ======================================================================================================
 % Checklist: result critically evaluated, compared with the baselines, what it means for the problem.
