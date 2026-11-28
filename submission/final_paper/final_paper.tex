@@ -201,8 +201,8 @@ Lichess derives the speed; \citealp{scalachessspeed}), the clock and the evaluat
 legal, which Chapter~\ref{ch:preprocessing} checks rather than assumes. Clocks are in almost every game, but
 evaluations and marks only in analysed ones, about 10\,\% of the month; games without them have no label and
 cannot be imputed, so such games are dropped. Of the \stale{580} million moves of the complete games, \stale{5.51}\,\% are
-blunders (August: \tbd\,\%; a model learns the rate of its month, a \emph{monthly bias}). Never predicting a
-blunder, the majority class, is right on \stale{94.5}\,\% of the moves, so accuracy cannot judge our models. The
+blunders (August: \tbd\,\%; a model learns the rate of its month, a \emph{monthly bias}). Naively predicting no
+blunders results in the model being right on \stale{94.5}\,\% of the moves, so accuracy cannot judge our models. The
 rate depends on the situation (Figure~\ref{fig:rates}). In a first sample of \stale{945,171} moves it was
 \stale{7.8}\,\% below a rating of 1,200 and \stale{3.9}\,\% from 2,000 on, \stale{8.2}\,\% with less than a
 twentieth of the time left and \stale{4.8}\,\% with more than half, and \stale{27.7}\,\% right after the
@@ -271,15 +271,15 @@ and above); moves fall into 756 \emph{buckets}, speed $\times$ the mover's ratin
 only define buckets of moves). The buckets give the baseline and the checks. Every game has fixed random
 numbers, hashes of a seed and its id, so every draw from the pool (\stale{871,412} games) can be repeated.
 
-\textbf{Three designs.} A \emph{random} draw gives every group its share of the month only on average. A
-\emph{stratified} draw gives it exactly and draws at random inside each group, removing this chance variation
-\cite{cochran1977sampling}; it is our design. A
-\emph{balanced} draw then swaps single games for spare games of the same group whenever this brings the buckets'
-blunder rates as a whole closer to the month's, keeping each bucket's share of moves. For it: the sample matches the
-month in every combination of speed, rating and time left. Against it: it chooses games by their label,
+\textbf{Three designs.} A \emph{random} draw gives every group its share of the month only on average. We settled on a
+\emph{stratified} draw, as it gives it exactly and draws at random inside each group, removing this chance variation
+\cite{cochran1977sampling}. A
+\emph{balanced} draw then swaps single games for spare games of the same group, whenever this brings the buckets'
+blunder rates as a whole closer to the month's, keeping each bucket's share of moves. The balanced draw sample matches the
+month in every combination of speed, rating and time left. However, it chooses games by their label,
 replacing games with blunders by calmer ones, which may bend relations we do not watch. Following the
-lecturer's advice we balance the \emph{test} games, so that test scores do not depend on chance deviations of
-70,000 games; this can only favour the bucket-rate baseline, which predicts exactly the month's rates, so a
+lecturer's advice, we balanced the \emph{test} games so that test scores do not depend on chance deviations of
+70,000 games. This can only favour the bucket-rate baseline, which predicts exactly the month's rates, so a
 model's lead over it is conservative. Whether balancing the \emph{training} games helps is goal~4, so the
 \emph{stratified} and the \emph{balanced run} differ only there.
 
@@ -300,7 +300,7 @@ The second step turns the games into one row per move with what is known before 
 adds an engine's view, and cleans and reduces the features.
 
 \textbf{Features.} We replay every game with python-chess \cite{pythonchess}. A move in the file holds only a
-clock, an evaluation and a mark, so we generate 38 features from the game so far, in six groups: \emph{game}
+clock, an evaluation and a mark, so we generated 38 features in six groups: \emph{game}
 (speed, start time, increment, colour, move number, hour, kind of event, opening family), \emph{rating} (the
 mover's, the opponent's, their difference), \emph{clock} (both clocks; the clock as a share of the estimated
 duration, as 30 seconds mean little in classical and much in bullet; their difference; the time spent on recent
@@ -321,18 +321,18 @@ check, material of both sides, difference, total).
 
 \textbf{False predictors and leakage.} The label follows from the evaluation after the move, so a feature that
 sees the move or anything later gives the answer away \cite{kaufman2012leakage}. We extract, and then visibly
-remove, 13 such columns: the move's mark, loss, evaluation, clock and time spent; the game's result, rating
+remove 13 such columns: the move's mark, loss, evaluation, clock and time spent; the game's result, rating
 changes, termination and length; the opening's name and its letter before ply~12, which Lichess derives from
 later moves; and the player names, which would let a model memorise players instead of situations. The leakage
 check cut \stale{2,000} random games (\stale{100} also with Stockfish): no feature left of the cut changed, while
 the label of the cut move changed in \stale{673} games, so a feature reading it would have been caught.
 
-\textbf{External knowledge: Stockfish.} The file's evaluation describes the position, not the \emph{choice} the
+\textbf{External knowledge: Stockfish.} The file's evaluation describes the position, not the potential \emph{choices} the
 mover faces: where one move holds and thirty lose, a blunder is likely; where almost all are fine, it is not. We
-add it with Stockfish~19 \cite{stockfish} on the position before every move, never looking at the move played. A depth-10 search gives the win probability after the best move and how much the second to fifth best
-lose against it; a cheap depth-4 score of every legal move, enough to see a hanging queen, gives the losses of
+combined it with Stockfish~19 \cite{stockfish} on the position before every move, never looking at the move played. A depth-10 search gives the win probability after the best move and how much the second to fifth best
+lose against it. A cheap depth-4 score of every legal move, enough to see a hanging queen, provides 15 columns: the losses of
 the five worst moves, the number of moves within an inaccuracy of the best, the shares of moves losing at least
-an inaccuracy, a mistake or a blunder, and the number of moves scored: 15 columns. The passes take 31 and 8~ms per position on one core,
+an inaccuracy, a mistake or a blunder, and the number of moves scored. The passes take 31 and 8~ms per position on one core,
 against 136~ms for depth 10 on every move; the \stale{24.4} million positions took \stale{15} hours on 16 cores.
 
 \textbf{Cleaning.} \emph{Missing values} are structural (no earlier move before the first); dropping them would
@@ -344,16 +344,17 @@ equals the start time.
 \emph{Normalisation}: \texttt{Event} names speed and kind of game in several forms (\texttt{Rated Blitz game},
 \texttt{Blitz swiss \dots}), which we map to one speed and one kind.
 
-\textbf{Reduction.} Redundant features slow training on 18 million rows, make linear coefficients unstable and
-split one signal's importance between copies, so we select features by fixed rules on 70,000 training games.
-We remove (1)~by \emph{domain} a feature that follows from kept ones (the opponent's rating and clock, both
-sides' material, the evaluation in pawns) or that kept ones cover (start time and increment, carried by speed
-and the clock share); (2)~as \emph{redundant} the less informative of two features with Spearman $|\rho| \ge
-0.9$; (3)~as \emph{weak} a feature with less than 1\,\% of the best feature's mutual information with the
-target, which also sees curved relations. Speed, rating and clock, on which the buckets rest, stay regardless,
-as do move number and total material ($\rho \approx -0.9$), which measure the time in the game and how
-simplified the position is. The rules remove \stale{7} features by domain and \stale{5} as weak (colour, hour,
-kind of event, rating gap, check), leaving \stale{26}; boosting scored the same without them. With Stockfish only
+\textbf{Reduction.} Redundant features slow training on 18 million rows, make linear coefficients unstable and split one
+signal's importance between copies, so we select features by three fixed rules on 70,000 training games.
+\emph{Domain}: we drop features that follow from kept ones (the opponent's rating and clock, both sides'
+material, the evaluation in pawns) or that kept ones already cover (start time and increment, carried by
+speed and the clock share). \emph{Redundancy}: of two features with Spearman $|\rho| \ge 0.9$, we drop the
+less informative. \emph{Weakness}: we drop features whose mutual information with the target, which unlike
+$\rho$ also captures non-linear relations, is below 1\,\% of the best feature's. Speed, rating and clock,
+on which the buckets rest, are always kept, as are move number and total material despite $\rho \approx
+-0.9$, since one measures how far the game has progressed and the other how simplified the position is.
+Domain removes \stale{7} features, redundancy none and weakness \stale{5} (colour, hour, kind of event,
+rating gap, check), leaving \stale{26}; boosting scored the same without them. With Stockfish only
 engine columns may go (\tbd{} of 15 remain), so leaving them out gives exactly the features without the engine. The repository
 documents every removal with the measured numbers.
 
